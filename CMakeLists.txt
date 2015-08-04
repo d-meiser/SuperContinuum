@@ -34,6 +34,8 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   add_definitions(-D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
 endif()
 
+include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
+
 add_subdirectory(npp)
 if(NPP_BUILD_TESTS)
   add_subdirectory(gtest-1.7.0)
