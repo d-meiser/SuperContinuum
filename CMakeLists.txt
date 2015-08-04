@@ -45,5 +45,6 @@ add_subdirectory(npp)
 if(NPP_BUILD_TESTS)
   add_subdirectory(gtest-1.7.0)
   include_directories(${gtest_SOURCE_DIR}/include)
+  add_subdirectory(tests)
 endif()
 
