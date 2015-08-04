@@ -35,6 +35,11 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif()
 
 include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
+find_path(PETSC_INCLUDE_DIR petsc.h 
+    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/../include)
+find_library(PETSC_LIB petsc
+    PATHS ${PETSC_DIR}
+    PATH_SUFFIXES lib)
 
 add_subdirectory(npp)
 if(NPP_BUILD_TESTS)
