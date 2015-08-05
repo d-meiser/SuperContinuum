@@ -10,6 +10,13 @@ option(NPP_BUILD_TESTS "Whether to build tests" OFF)
 option(NPP_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
 option(NPP_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
 
+include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
+find_path(PETSC_INCLUDE_DIR petsc.h
+    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/../include)
+find_library(PETSC_LIB petsc
+    PATHS ${PETSC_DIR}
+    PATH_SUFFIXES lib)
+
 if(NPP_WITH_ADDRESS_SANITIZER)
   set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
   set(CMAKE_REQUIRED_FLAGS "-fsanitize=address")
@@ -34,17 +41,17 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   add_definitions(-D_SCL_SECURE_NO_WARNINGS -D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
-find_path(PETSC_INCLUDE_DIR petsc.h 
-    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/../include)
-find_library(PETSC_LIB petsc
-    PATHS ${PETSC_DIR}
-    PATH_SUFFIXES lib)
 
+add_subdirectory(src)
+add_subdirectory(include)
 add_subdirectory(npp)
 if(NPP_BUILD_TESTS)
-  add_subdirectory(gtest-1.7.0)
-  include_directories(${gtest_SOURCE_DIR}/include)
+  find_path(CGREEN_INCLUDE_DIR cgreen/cgreen.h
+      HINTS /usr/include;/usr/local/include)
+  find_library(CGREEN_LIB cgreen
+      HINTS /usr/local/lib;/usr/lib;/usr/lib64)
+  message(STATUS "CGREEN_INCLUDE_DIR == ${CGREEN_INCLUDE_DIR}")
+  message(STATUS "CGREEN_LIB == ${CGREEN_LIB}")
   add_subdirectory(tests)
 endif()
 
