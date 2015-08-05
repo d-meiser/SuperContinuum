@@ -47,9 +47,9 @@ add_subdirectory(include)
 add_subdirectory(npp)
 if(NPP_BUILD_TESTS)
   find_path(CGREEN_INCLUDE_DIR cgreen/cgreen.h
-      HINTS /usr/include;/usr/local/include)
+      HINTS ${PROJECT_SOURCE_DIR}/cgreen/include;/usr/include;/usr/local/include)
   find_library(CGREEN_LIB cgreen
-      HINTS /usr/local/lib;/usr/lib;/usr/lib64)
+      HINTS ${PROJECT_SOURCE_DIR}/cgreen/lib;/usr/local/lib;/usr/lib;/usr/lib64)
   message(STATUS "CGREEN_INCLUDE_DIR == ${CGREEN_INCLUDE_DIR}")
   message(STATUS "CGREEN_LIB == ${CGREEN_LIB}")
   add_subdirectory(tests)
