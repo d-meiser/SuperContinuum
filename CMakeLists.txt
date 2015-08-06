@@ -43,6 +43,11 @@ endif()
 
 
 add_subdirectory(src)
+generate_export_header(npp_lib
+    EXPORT_FILE_NAME NppExport.h
+    BASE_NAME npp
+    EXPORT_MACRO_NAME NPP_API
+    )
 add_subdirectory(include)
 add_subdirectory(npp)
 if(NPP_BUILD_TESTS)

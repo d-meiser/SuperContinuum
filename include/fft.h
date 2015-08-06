@@ -3,9 +3,12 @@
 
 #include <petscdm.h>
 #include <petscmat.h>
+#include <NppExport.h>
 
-namespace npp {
-  Mat createFFTFromDMDA(DM da);
-};
+
+struct NppFft_;
+typedef struct NppFft_* NppFft;
+
+NPP_API NppFft nppCreateFftFromDMDA(DM da);
 
 #endif

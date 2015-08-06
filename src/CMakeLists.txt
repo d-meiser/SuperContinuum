@@ -5,13 +5,8 @@ include_directories(
     ${PETSC_PACKAGE_INCLUDES}
     )
 set(NPP_LIB_SRCS
-    fft.cpp
+    fft.c
    )
 add_library(npp_lib ${NPP_LIB_SRCS})
 install(TARGETS npp_lib DESTINATION lib)
-generate_export_header(npp_lib
-    EXPORT_FILE_NAME NppExport.h
-    BASE_NAME npp
-    EXPORT_MACRO_NAME NPP_API
-    )
 

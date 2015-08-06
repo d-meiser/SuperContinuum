@@ -11,7 +11,7 @@ cd cgreen-code
 rm -rf build
 mkdir build
 cd build
-cmake -DCMAKE_INSTALL_PREFIX:BOOL=../../cgreen ../cgreen
+cmake -DWITH_CXX:BOOL=ON -DCMAKE_INSTALL_PREFIX:BOOL=../../cgreen ../cgreen
 make -j2
 make install
 

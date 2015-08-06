@@ -3,6 +3,7 @@ set(TESTS
    )
 
 include_directories(
+    ${PROJECT_BINARY_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${PETSC_INCLUDE_DIR}
     ${PETSC_PACKAGE_INCLUDES}
@@ -10,8 +11,8 @@ include_directories(
     )
 
 foreach(t ${TESTS})
-  add_executable(test_${t} test_${t}.cpp)
-  target_link_libraries(test_${t} ${CGREEN_LIB})
+  add_executable(test_${t} test_${t}.c)
+  target_link_libraries(test_${t} npp_lib ${CGREEN_LIB})
   add_test(${t} test_${t})
 endforeach()
 
