@@ -13,7 +13,7 @@ include_directories(
 foreach(t ${TESTS})
   add_executable(test_${t} test_${t}.c)
   target_link_libraries(test_${t}
-      npp_lib ${CGREEN_LIB} ${PETSC_LIB} ${PETSC_PACKAGE_LIBS})
+      sc_lib ${CGREEN_LIB} ${PETSC_LIB} ${PETSC_PACKAGE_LIBS})
   add_test(${t} test_${t})
 endforeach()
 
