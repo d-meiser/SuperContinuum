@@ -5,6 +5,6 @@ include_directories(
     ${PETSC_PACKAGE_INCLUDES}
     )
 
-add_executable(npp npp.c)
-target_link_libraries(npp ${PETSC_LIB} ${PETSC_PACKAGE_LIBS})
+add_executable(sc sc.c)
+target_link_libraries(sc ${PETSC_LIB} ${PETSC_PACKAGE_LIBS})
 

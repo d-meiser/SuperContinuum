@@ -4,9 +4,9 @@ include_directories(
     ${PETSC_INCLUDE_DIR}
     ${PETSC_PACKAGE_INCLUDES}
     )
-set(NPP_LIB_SRCS
+set(SC_LIB_SRCS
     fft.c
    )
-add_library(npp_lib ${NPP_LIB_SRCS})
-install(TARGETS npp_lib DESTINATION lib)
+add_library(sc_lib ${SC_LIB_SRCS})
+install(TARGETS sc_lib DESTINATION lib)
 

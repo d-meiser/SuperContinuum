@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 2.6.2)
-project(NPP)
+project(SuperContinuum)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 enable_testing()
 include(CheckCXXCompilerFlag)
 include(GenerateExportHeader)
 
-option(NPP_BUILD_TESTS "Whether to build tests" OFF)
-option(NPP_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
-option(NPP_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
+option(SC_BUILD_TESTS "Whether to build tests" OFF)
+option(SC_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
+option(SC_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
 
 include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
 find_path(PETSC_INCLUDE_DIR petsc.h
@@ -17,7 +17,7 @@ find_library(PETSC_LIB petsc
     PATHS ${PETSC_DIR}
     PATH_SUFFIXES lib)
 
-if(NPP_WITH_ADDRESS_SANITIZER)
+if(SC_WITH_ADDRESS_SANITIZER)
   set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
   set(CMAKE_REQUIRED_FLAGS "-fsanitize=address")
   CHECK_CXX_COMPILER_FLAG(-fsanitize=address HAVE_ADDRESS_SANITIZER)
@@ -29,7 +29,7 @@ if(NPP_WITH_ADDRESS_SANITIZER)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCC OR "${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
-  if(NPP_ENABLE_COVERAGE)
+  if(SC_ENABLE_COVERAGE)
     add_definitions("-ftest-coverage -fprofile-arcs")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ftest-coverage -fprofile-arcs")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftest-coverage -fprofile-arcs")
@@ -43,14 +43,14 @@ endif()
 
 
 add_subdirectory(src)
-generate_export_header(npp_lib
-    EXPORT_FILE_NAME NppExport.h
-    BASE_NAME npp
-    EXPORT_MACRO_NAME NPP_API
+generate_export_header(sc_lib
+    EXPORT_FILE_NAME ScExport.h
+    BASE_NAME sc
+    EXPORT_MACRO_NAME SC_API
     )
 add_subdirectory(include)
-add_subdirectory(npp)
-if(NPP_BUILD_TESTS)
+add_subdirectory(sc)
+if(SC_BUILD_TESTS)
   find_path(CGREEN_INCLUDE_DIR cgreen/cgreen.h
       HINTS ${PROJECT_SOURCE_DIR}/cgreen/include;/usr/include;/usr/local/include)
   find_library(CGREEN_LIB cgreen

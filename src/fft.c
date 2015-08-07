@@ -1,14 +1,14 @@
 #include <fft.h>
 #include <petscdmda.h>
 
-struct NppFft_ {
+struct ScFft_ {
   DM da;
   Mat matFft;
 };
 
 #undef __FUNCT__
-#define __FUNCT__ "nppFftCreate"
-PetscErrorCode nppFftCreate(DM da, NppFft *fft)
+#define __FUNCT__ "scFftCreate"
+PetscErrorCode scFftCreate(DM da, ScFft *fft)
 {
   PetscErrorCode ierr;
   PetscInt       dim, dims[3];
@@ -27,8 +27,8 @@ PetscErrorCode nppFftCreate(DM da, NppFft *fft)
 }
 
 #undef __FUNCT__
-#define __FUNCT__ "nppFftDestroy"
-PetscErrorCode nppFftDestroy(NppFft *fft)
+#define __FUNCT__ "scFftDestroy"
+PetscErrorCode scFftDestroy(ScFft *fft)
 {
   PetscErrorCode ierr;
 
@@ -40,8 +40,8 @@ PetscErrorCode nppFftDestroy(NppFft *fft)
 }
 
 #undef __FUNCT__
-#define __FUNCT__ "nppFftGetDM"
-PetscErrorCode nppFftGetDM(NppFft fft, DM *da)
+#define __FUNCT__ "scFftGetDM"
+PetscErrorCode scFftGetDM(ScFft fft, DM *da)
 {
   PetscFunctionBegin;
   *da = fft->da;
@@ -49,16 +49,16 @@ PetscErrorCode nppFftGetDM(NppFft fft, DM *da)
 }
 
 #undef __FUNCT__
-#define __FUNCT__ "nppFftTransform"
-PetscErrorCode nppFftTransform(Vec v, PetscInt i, Vec y)
+#define __FUNCT__ "scFftTransform"
+PetscErrorCode scFftTransform(Vec v, PetscInt i, Vec y)
 {
   PetscFunctionBegin;
   PetscFunctionReturn(0);
 }
 
 #undef __FUNCT__
-#define __FUNCT__ "nppFftCreateVecsFFTW"
-PetscErrorCode nppFftCreateVecsFFTW(NppFft fft, Vec *x, Vec *y, Vec *z)
+#define __FUNCT__ "scFftCreateVecsFFTW"
+PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z)
 {
   PetscErrorCode ierr;
 

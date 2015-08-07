@@ -7,13 +7,13 @@ static const char help[] = "Unit tests for FFT methods.";
 Ensure(fft_can_be_constructed_from_DMDA)
 {
   PetscErrorCode ierr;
-  NppFft fft;
+  ScFft fft;
   DM da;
   ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);
   assert_that(ierr, is_equal_to(0));
-  ierr = nppFftCreate(da, &fft);
+  ierr = scFftCreate(da, &fft);
   assert_that(ierr, is_equal_to(0));
-  nppFftDestroy(&fft);
+  scFftDestroy(&fft);
   ierr = DMDestroy(&da);
   assert_that(ierr, is_equal_to(0));
 }
@@ -21,23 +21,23 @@ Ensure(fft_can_be_constructed_from_DMDA)
 Ensure(the_right_dm_gets_registered_with_fft)
 {
   PetscErrorCode ierr;
-  NppFft fft;
+  ScFft fft;
   DM da, da1;
   ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);
   assert_that(ierr, is_equal_to(0));
-  ierr = nppFftCreate(da, &fft);
+  ierr = scFftCreate(da, &fft);
   assert_that(ierr, is_equal_to(0));
-  ierr = nppFftGetDM(fft, &da1);
+  ierr = scFftGetDM(fft, &da1);
   assert_that(ierr, is_equal_to(0));
   assert_that(da1, is_equal_to(da));
-  nppFftDestroy(&fft);
+  scFftDestroy(&fft);
   ierr = DMDestroy(&da);
   assert_that(ierr, is_equal_to(0));
 }
 
 Ensure(forward_transform_yields_constant_vector_from_delta_function)
 {
-  NppFft fft;
+  ScFft fft;
   DM da;
   Vec v;
 
@@ -51,27 +51,27 @@ Ensure(forward_transform_yields_constant_vector_from_delta_function)
   VecView(v, PETSC_VIEWER_STDOUT_WORLD);
 
   DMRestoreGlobalVector(da, &v);
-  nppFftCreate(da, &fft);
-  nppFftDestroy(&fft);
+  scFftCreate(da, &fft);
+  scFftDestroy(&fft);
 }
 
 Ensure(output_vector_has_correct_size)
 {
-  NppFft fft;
+  ScFft fft;
   DM da;
   Vec x, y, z;
   PetscInt dim;
 
   DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,10,2,1,NULL,&da);
-  nppFftCreate(da, &fft);
-  nppFftCreateVecsFFTW(fft, &x, &y, &z);
+  scFftCreate(da, &fft);
+  scFftCreateVecsFFTW(fft, &x, &y, &z);
   VecGetSize(x, &dim);
   assert_that(dim, is_greater_than(3));
   VecView(x, PETSC_VIEWER_STDOUT_WORLD);
   VecDestroy(&x);
   VecDestroy(&y);
   VecDestroy(&z);
-  nppFftDestroy(&fft);
+  scFftDestroy(&fft);
 }
 
 int main(int argc, char **argv)

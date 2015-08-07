@@ -3,16 +3,16 @@
 
 #include <petscdm.h>
 #include <petscmat.h>
-#include <NppExport.h>
+#include <ScExport.h>
 
 
-struct NppFft_;
-typedef struct NppFft_* NppFft;
+struct ScFft_;
+typedef struct ScFft_* ScFft;
 
-NPP_API PetscErrorCode nppFftCreate(DM da, NppFft *fft);
-NPP_API PetscErrorCode nppFftDestroy(NppFft *fft);
-NPP_API PetscErrorCode nppFftGetDM(NppFft fft, DM *da);
-NPP_API PetscErrorCode nppFftTransform(Vec v, PetscInt i, Vec y);
-NPP_API PetscErrorCode nppFftCreateVecsFFTW(NppFft fft, Vec *x, Vec *y, Vec *z);
+SC_API PetscErrorCode scFftCreate(DM da, ScFft *fft);
+SC_API PetscErrorCode scFftDestroy(ScFft *fft);
+SC_API PetscErrorCode scFftGetDM(ScFft fft, DM *da);
+SC_API PetscErrorCode scFftTransform(Vec v, PetscInt i, Vec y);
+SC_API PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z);
 
 #endif
