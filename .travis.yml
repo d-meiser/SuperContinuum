@@ -1,0 +1,29 @@
+virtualenv:
+  system_site_packages: true
+language: c
+cache:
+  apt: true
+before_install:
+  - sudo add-apt-repository --yes ppa:kalakris/cmake
+  - sudo apt-get update -qq
+  - sudo apt-get install cmake valgrind
+  - sudo apt-get install -qq lcov
+  - gem install coveralls-lcov
+  - sudo apt-get install libblas-dev libatlas-dev liblapack-dev
+  - sh ./utilities/travis_get_mpi.sh mpich3
+  - sh ./utilities/get_cgreen.sh
+  - sh ./utilities/get_petsc.sh
+script:
+  - mkdir -p build
+  - cd build
+  - cmake --version
+  - cmake -DPETSC_DIR=utilities/petsc-3.6.1/double-dbg -DSC_BUILD_TESTS=ON -DBUILD_SHARED_LIBS=ON ..
+  - make -j2
+  - ctest --output-on-failure
+after_success:
+  - lcov -d tests -d src -base-directory .. -c -o coverage.info
+  - lcov --remove coverage.info '/usr/*' -o coverage.info
+  - lcov --remove coverage.info 'utilities/petsc-3.6.1/double-dbg/*' -o coverage.info
+  - lcov --remove coverage.info 'cgreen/*' -o coverage.info
+  - cd ..
+  - coveralls-lcov build/coverage.info
