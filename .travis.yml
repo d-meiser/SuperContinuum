@@ -21,7 +21,7 @@ script:
   - mkdir -p build
   - cd build
   - cmake --version
-  - cmake -DPETSC_DIR=`pwd`/../petsc-3.6.1/double-dbg -DSC_BUILD_TESTS=ON -DBUILD_SHARED_LIBS=ON ..
+  - cmake -DPETSC_DIR=`pwd`/../petsc-3.6.1/double-dbg -DSC_BUILD_TESTS=ON -DSC_ENABLE_COVERAGE=ON -DBUILD_SHARED_LIBS=ON ..
   - make -j2
   - ctest -j2 --output-on-failure
 after_success:
