@@ -4,16 +4,12 @@ PETSC_RELEASE_URL=http://ftp.mcs.anl.gov/pub/petsc/release-snapshots
 PETSC_ARCH=double-dbg
 PETSC_DIR=`pwd`/petsc-3.6.1
 
-if [ ! -f $PETSC_TAR_BALL ]; then
-  echo "PETSc tarball not found - downloading it."
+if [ ! -e $PETSC_DIR/configure ]; then
+  echo "$PETSC_DIR/configure not found - downloading PETSc tarball it."
   wget $PETSC_RELEASE_URL/$PETSC_TAR_BALL
-else
-  echo "PETSc tarball found."
-fi
-
-if [ ! -d petsc-3.6.1 ]; then
-  echo "PETSc directory no present - extracting tarball."
   tar xfz $PETSC_TAR_BALL
+else
+  echo "$PETSC_DIR/configure found - assuming we already have PETSc source."
 fi
 
 PETSC_LIBRARY=$PETSC_DIR/$PETSC_ARCH/lib/libpetsc.so
