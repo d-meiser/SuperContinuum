@@ -47,10 +47,7 @@ generate_export_header(sc_lib
 add_subdirectory(include)
 add_subdirectory(sc)
 if(SC_BUILD_TESTS)
-  find_path(CGREEN_INCLUDE_DIR cgreen/cgreen.h
-      HINTS ${PROJECT_SOURCE_DIR}/cgreen/include;/usr/include;/usr/local/include)
-  find_library(CGREEN_LIB cgreen
-      HINTS ${PROJECT_SOURCE_DIR}/cgreen/lib64;/usr/local/lib;/usr/lib;/usr/lib64)
+  find_package(Cgreen REQUIRED)
   add_subdirectory(tests)
 endif()
 
