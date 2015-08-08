@@ -4,6 +4,8 @@ virtualenv:
 language: c
 cache:
   apt: true
+  directories:
+  - petsc-3.6.1
 addons:
   apt:
     packages:
