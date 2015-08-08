@@ -6,6 +6,7 @@ cache:
   apt: true
   directories:
   - petsc-3.6.1
+  - cgreen-code
 addons:
   apt:
     packages:
