@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ ! -d cgreen-code ]; then
+if [ ! -d cgreen-code/cgreen ]; then
   svn checkout svn://svn.code.sf.net/p/cgreen/code/trunk cgreen-code
 else
   cd cgreen-code
