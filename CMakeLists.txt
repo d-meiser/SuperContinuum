@@ -10,11 +10,11 @@ option(SC_BUILD_TESTS "Whether to build tests" OFF)
 option(SC_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
 option(SC_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
 
-include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
+include(${PETSC_DIR}/${PETSC_ARCH}/lib/petsc/conf/PETScConfig.cmake)
 find_path(PETSC_INCLUDE_DIR petsc.h
-    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/../include)
+    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/include)
 find_library(PETSC_LIB petsc
-    PATHS ${PETSC_DIR}
+    PATHS ${PETSC_DIR}/${PETSC_ARCH}
     PATH_SUFFIXES lib)
 
 if(SC_WITH_ADDRESS_SANITIZER)
