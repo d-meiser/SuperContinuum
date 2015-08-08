@@ -16,6 +16,7 @@ PETSC_ARCH=double-dbg PETSC_DIR=`pwd` ./configure \
   --with-pthread=0 \
   --download-fftw=1 \
   --with-mpi=1 \
+  --download-mpich=1 \
   --with-mpiuni-fortran-binding=0 \
   --with-fortran-interfaces
 make PETSC_DIR=`pwd` PETSC_ARCH=double-dbg all
