@@ -28,6 +28,8 @@ after_success:
   - lcov -d tests -d src -base-directory .. -c -o coverage.info
   - lcov --remove coverage.info '/usr/*' -o coverage.info
   - lcov --remove coverage.info 'utilities/petsc-3.6.1/double-dbg/*' -o coverage.info
+  - lcov --remove coverage.info 'petsc-3.6.1/*' -o coverage.info
   - lcov --remove coverage.info 'cgreen/*' -o coverage.info
+  - lcov --remove coverage.info 'tests/*' -o coverage.info
   - cd ..
   - coveralls-lcov build/coverage.info
