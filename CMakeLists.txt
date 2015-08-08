@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.6.2)
 project(SuperContinuum)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 enable_testing()
@@ -10,12 +11,7 @@ option(SC_BUILD_TESTS "Whether to build tests" OFF)
 option(SC_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
 option(SC_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
 
-include(${PETSC_DIR}/lib/petsc/conf/PETScConfig.cmake)
-find_path(PETSC_INCLUDE_DIR petsc.h
-    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/../include)
-find_library(PETSC_LIB petsc
-    PATHS ${PETSC_DIR}
-    PATH_SUFFIXES lib)
+find_package(PETSc REQUIRED)
 
 if(SC_WITH_ADDRESS_SANITIZER)
   set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
@@ -51,10 +47,7 @@ generate_export_header(sc_lib
 add_subdirectory(include)
 add_subdirectory(sc)
 if(SC_BUILD_TESTS)
-  find_path(CGREEN_INCLUDE_DIR cgreen/cgreen.h
-      HINTS ${PROJECT_SOURCE_DIR}/cgreen/include;/usr/include;/usr/local/include)
-  find_library(CGREEN_LIB cgreen
-      HINTS ${PROJECT_SOURCE_DIR}/cgreen/lib64;/usr/local/lib;/usr/lib;/usr/lib64)
+  find_package(Cgreen REQUIRED)
   add_subdirectory(tests)
 endif()
 
