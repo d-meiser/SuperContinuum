@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.6.2)
 project(SuperContinuum)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 enable_testing()
@@ -10,12 +11,7 @@ option(SC_BUILD_TESTS "Whether to build tests" OFF)
 option(SC_ENABLE_COVERAGE "Instrument tests for coverage" OFF)
 option(SC_WITH_ADDRESS_SANITIZER "Whether to build with address sanitizer enabled" OFF)
 
-include(${PETSC_DIR}/${PETSC_ARCH}/lib/petsc/conf/PETScConfig.cmake)
-find_path(PETSC_INCLUDE_DIR petsc.h
-    PATHS ${PETSC_PACKAGE_INCLUDES} ${PETSC_DIR}/include)
-find_library(PETSC_LIB petsc
-    PATHS ${PETSC_DIR}/${PETSC_ARCH}
-    PATH_SUFFIXES lib)
+find_package(PETSc REQUIRED)
 
 if(SC_WITH_ADDRESS_SANITIZER)
   set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
