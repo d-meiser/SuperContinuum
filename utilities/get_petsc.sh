@@ -9,7 +9,6 @@ if [ ! -d petsc-3.6.1 ]; then
 fi
 cd petsc-3.6.1
 PETSC_ARCH=double-dbg PETSC_DIR=`pwd` ./configure \
-  --with-mpi=0 \
   --with-x=0 \
   --with-ssl=0 \
   --with-fortran-kernels=0 \
