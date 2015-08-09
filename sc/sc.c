@@ -69,6 +69,7 @@ static PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alph, PetscRea
 static PetscErrorCode testFirstDerivative();
 static PetscErrorCode testSecondDerivative();
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
+static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx);
 
 int main(int argc,char **argv) {
   TS             ts;
@@ -79,7 +80,7 @@ int main(int argc,char **argv) {
   PetscReal      ftime;
   SNES           ts_snes;
   struct AppCtx  user;
-  Mat            J,Jrhs;
+  Mat            J,Jprec,Jrhs;
   PetscDraw      draw;
   PetscBool      useColoring, flg;
 
@@ -116,9 +117,19 @@ int main(int argc,char **argv) {
   ierr = DMCreateMatrix(da,&Jrhs);CHKERRQ(ierr);
   ierr = TSSetRHSJacobian(ts,Jrhs,Jrhs,SCRHSJacobian,&user);CHKERRQ(ierr);
   ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
+
   ierr = DMCreateMatrix(da,&J);CHKERRQ(ierr);
+  ierr = buildConstantPartOfJacobian(da, J, &user);CHKERRQ(ierr);
+  ierr = MatSetOption(J, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
+  ierr = MatStoreValues(J);CHKERRQ(ierr);
+
+  ierr = DMCreateMatrix(da,&Jprec);CHKERRQ(ierr);
+  ierr = buildConstantPartOfJacobian(da, Jprec, &user);CHKERRQ(ierr);
+  ierr = MatSetOption(Jprec, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
+  ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
+
   if (!useColoring) {
-    ierr = TSSetIJacobian(ts,J,J,SCIJacobian,&user);CHKERRQ(ierr);
+    ierr = TSSetIJacobian(ts,J,Jprec,SCIJacobian,&user);CHKERRQ(ierr);
   } else {
     SNES snes;
     ierr = TSGetSNES(ts,&snes);CHKERRQ(ierr);
@@ -138,8 +149,6 @@ int main(int argc,char **argv) {
 
   ierr = TSSetFromOptions(ts);CHKERRQ(ierr);
 
-  ierr = checkIFunctionAndJacobianConsistent(ts, &user);CHKERRQ(ierr);
-
   ierr = TSSolve(ts,x);CHKERRQ(ierr);
   ierr = TSGetSolveTime(ts,&ftime);CHKERRQ(ierr);
   ierr = TSGetTimeStepNumber(ts,&steps);CHKERRQ(ierr);
@@ -155,6 +164,9 @@ int main(int argc,char **argv) {
   ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
   ierr = TSDestroy(&ts);CHKERRQ(ierr);
   ierr = DMDestroy(&da);CHKERRQ(ierr);
+  ierr = MatDestroy(&J);CHKERRQ(ierr);
+  ierr = MatDestroy(&Jprec);CHKERRQ(ierr);
+  ierr = MatDestroy(&Jrhs);CHKERRQ(ierr);
   if (user.visualize) {
     ierr = PetscViewerDestroy(&user.viewer);CHKERRQ(ierr);
   }
@@ -400,6 +412,39 @@ PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, 
   PetscFunctionReturn(0);
 }
 
+PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx)
+{
+  PetscErrorCode ierr;
+  PetscInt       i, Mx;
+  MatStencil     col = {0}, row = {0};
+  PetscScalar    v, hx;
+  DMDALocalInfo  info;
+
+  PetscFunctionBegin;
+  ierr = MatZeroEntries(J);CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  hx = 1.0/(PetscReal)(Mx-1);
+  ierr = addSecondDerivative(da, J, -1.0, hx, 1, 0);CHKERRQ(ierr);
+  ierr = addFirstDerivative(da, J, -1.0, hx, 0, 0);CHKERRQ(ierr);
+  ierr = addFirstDerivative(da, J, -1.0, hx, 1, 1);CHKERRQ(ierr);
+
+  /* Auxiliary variable relation */
+  v = -1.0;
+  row.c = 0;
+  col.c = 1;
+  for (i=info.xs; i<info.xs+info.xm; i++) {
+    row.i = i;
+    col.i = i;
+    ierr=MatSetValuesStencil(J,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+
+  ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
 PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
   PetscInt       i,c,Mx;
@@ -411,24 +456,10 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
 
   PetscFunctionBegin;
   ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
+  ierr = MatRetrieveValues(Jpre);CHKERRQ(ierr);
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
-
-  hx = 1.0/(PetscReal)(Mx-1);
-  ierr = addSecondDerivative(da, Jpre, -1.0, hx, 1, 0);CHKERRQ(ierr);
-  ierr = addFirstDerivative(da, Jpre, -1.0, hx, 0, 0);CHKERRQ(ierr);
-  ierr = addFirstDerivative(da, Jpre, -1.0, hx, 1, 1);CHKERRQ(ierr);
-
-  /* Auxiliary variable relation */
-  v = -1.0;
-  row.c = 0;
-  col.c = 1;
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    row.i = i;
-    col.i = i;
-    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-  }
 
   /* Time derivative terms */
   v = a;
@@ -441,8 +472,19 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
   }
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  ierr=MatSetOption(Jpre,MAT_NEW_NONZERO_LOCATION_ERR,PETSC_TRUE);CHKERRQ(ierr);
+
   if (J != Jpre) {
+    ierr = MatZeroEntries(J);CHKERRQ(ierr);
+    ierr = MatRetrieveValues(J);CHKERRQ(ierr);
+/* Time derivative terms */
+    v = a;
+    for (i = info.xs; i < info.xs + info.xm; ++i) {
+      col.i = i;
+      for (c = 0; c < 2; ++c) {
+        col.c = c;
+        ierr=MatSetValuesStencil(J,1,&col,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+      }
+    }
     ierr = MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
     ierr = MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   }
