@@ -24,17 +24,31 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 #include <petscdraw.h>
 #include <petscmat.h>
 
+#include <fft.h>
+
 #define SQR(a) ((a) * (a))
 
+struct Cmplx {
+  PetscScalar re;
+  PetscScalar im;
+};
+
+struct FftData {
+  ScFft fft;
+  Vec xu;
+  Vec yu;
+  Vec zu;
+  Vec xv;
+  Vec yv;
+  Vec zv;
+};
+
 struct AppCtx {
-  PetscScalar l;
-  PetscBool   visualize;
-  PetscViewer viewer;
-  PetscReal   gamma;
-  Vec         utmp;
-  Vec         utmpIn;
-  Vec         utmpOut;
-  Mat         fft;
+  PetscScalar    l;
+  PetscBool      visualize;
+  PetscViewer    viewer;
+  PetscReal      gamma;
+  struct FftData fftData;
 };
 
 struct Field {
@@ -45,10 +59,10 @@ struct Field {
 
 static PetscErrorCode FormInitialSolution(DM,Vec);
 static PetscErrorCode MyTSMonitor(TS,PetscInt,PetscReal,Vec,void*);
-static PetscErrorCode NPPRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr);
-static PetscErrorCode NPPRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr);
-static PetscErrorCode NPPIFunction(TS ts,PetscReal t,Vec X,Vec Xdot,Vec G,void *ptr);
-static PetscErrorCode NPPIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx);
+static PetscErrorCode SCRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr);
+static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr);
+static PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X,Vec Xdot,Vec G,void *ptr);
+static PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx);
 PETSC_STATIC_INLINE PetscScalar initialState(PetscReal x);
 static PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
 static PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alph, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
@@ -88,27 +102,22 @@ int main(int argc,char **argv) {
 
   ierr = DMCreateGlobalVector(da,&x);CHKERRQ(ierr);
   ierr = VecDuplicate(x,&r);CHKERRQ(ierr);
-  ierr = VecCreate(PETSC_COMM_WORLD,&user.utmp);CHKERRQ(ierr);
-  ierr = VecGetLocalSize(x,&nlocal);CHKERRQ(ierr);
-  ierr = VecSetSizes(user.utmp, nlocal / (sizeof(struct Field) / sizeof(PetscScalar)), PETSC_DECIDE);CHKERRQ(ierr);
-  ierr = VecSetFromOptions(user.utmp);CHKERRQ(ierr);
 
-  ierr = VecGetSize(x,&nglobal);CHKERRQ(ierr);
-  nglobal /= (sizeof(struct Field) / sizeof(PetscScalar));
-  ierr = MatCreateFFT(PETSC_COMM_WORLD,1,&nglobal,MATFFTW,&user.fft);CHKERRQ(ierr);
-  ierr = MatCreateVecsFFTW(user.fft,&user.utmpIn,&user.utmpOut,NULL);CHKERRQ(ierr);
+  ierr = scFftCreate(da, &user.fftData.fft);CHKERRQ(ierr);
+  ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xu, &user.fftData.yu, &user.fftData.zu);CHKERRQ(ierr);
+  ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xv, &user.fftData.yv, &user.fftData.zv);CHKERRQ(ierr);
 
   ierr = TSCreate(PETSC_COMM_WORLD,&ts);CHKERRQ(ierr);
   ierr = TSSetDM(ts,da);CHKERRQ(ierr);
   ierr = TSSetType(ts,TSARKIMEX);CHKERRQ(ierr);
   ierr = TSSetProblemType(ts,TS_NONLINEAR);CHKERRQ(ierr);
-  ierr = TSSetRHSFunction(ts, NULL, NPPRHSFunction,&user);CHKERRQ(ierr);
+  ierr = TSSetRHSFunction(ts, NULL, SCRHSFunction,&user);CHKERRQ(ierr);
   ierr = DMCreateMatrix(da,&Jrhs);CHKERRQ(ierr);
-  ierr = TSSetRHSJacobian(ts,Jrhs,Jrhs,NPPRHSJacobian,&user);CHKERRQ(ierr);
-  ierr = TSSetIFunction(ts, NULL, NPPIFunction,&user);CHKERRQ(ierr);
+  ierr = TSSetRHSJacobian(ts,Jrhs,Jrhs,SCRHSJacobian,&user);CHKERRQ(ierr);
+  ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
   ierr = DMCreateMatrix(da,&J);CHKERRQ(ierr);
   if (!useColoring) {
-    ierr = TSSetIJacobian(ts,J,J,NPPIJacobian,&user);CHKERRQ(ierr);
+    ierr = TSSetIJacobian(ts,J,J,SCIJacobian,&user);CHKERRQ(ierr);
   } else {
     SNES snes;
     ierr = TSGetSNES(ts,&snes);CHKERRQ(ierr);
@@ -134,9 +143,13 @@ int main(int argc,char **argv) {
 
   ierr = VecDestroy(&x);CHKERRQ(ierr);
   ierr = VecDestroy(&r);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.utmp);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.utmpIn);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.utmpOut);CHKERRQ(ierr);
+  ierr = scFftDestroy(&user.fftData.fft);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
+  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
   ierr = TSDestroy(&ts);CHKERRQ(ierr);
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   if (user.visualize) {
@@ -181,7 +194,7 @@ PetscErrorCode testSecondDerivative() {
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode NPPRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr)
+PetscErrorCode SCRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr)
 {
   DM             da;
   DMDALocalInfo  info;
@@ -203,7 +216,7 @@ PetscErrorCode NPPRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr)
   PetscFunctionReturn(0);
 }
 
-static PetscErrorCode NPPRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr)
+static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr)
 {
   PetscInt       i;
   MatStencil     col = {0}, row = {0};
@@ -238,14 +251,15 @@ static PetscErrorCode NPPRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode NPPIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
+PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
 {
   DM             da;
   DMDALocalInfo  info;
   PetscErrorCode ierr;
   PetscInt       i,Mx;
-  PetscReal      hx,sx,tmpr,tmpi,k;
-  PetscScalar    *utilde;
+  PetscReal      hx,sx,k;
+  struct Cmplx   tmpu, tmpv;
+  PetscScalar    *utilde, *vtilde;
   PetscScalar    u,uxx,v;
   struct Field   *x, *xdot, *g;
   Vec            Xloc;
@@ -259,60 +273,41 @@ PetscErrorCode NPPIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
   sx = 1.0/(hx*hx);
 
   ierr = VecZeroEntries(G);CHKERRQ(ierr);
-
+  
   /*
-  ierr = VecStrideGather(X, 0, ctx->utmp, INSERT_VALUES);CHKERRQ(ierr);
-  ierr = VecScatterPetscToFFTW(ctx->fft, ctx->utmp, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = MatMult(ctx->fft, ctx->utmpIn, ctx->utmpOut);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  for (i = info.xs; i < info.xs + info.xm; ++i) {
-    tmpr = utilde[2 * i];
-    tmpi = utilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / Mx;
-    utilde[2 * i] = k * tmpi;
-    utilde[2 * i + 1] = -k * tmpr;
-  }
-  ierr = VecRestoreArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  ierr = MatMultTranspose(ctx->fft, ctx->utmpOut, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = VecScale(ctx->utmpIn, 1.0 / Mx);CHKERRQ(ierr);
-  ierr = VecScatterFFTWToPetsc(ctx->fft, ctx->utmpIn, ctx->utmp);CHKERRQ(ierr);
-  ierr = VecStrideScatter(ctx->utmp, 0, G, ADD_VALUES);CHKERRQ(ierr);
+  Equations:
 
-  ierr = VecStrideGather(X, 0, ctx->utmp, INSERT_VALUES);CHKERRQ(ierr);
-  ierr = VecScatterPetscToFFTW(ctx->fft, ctx->utmp, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = MatMult(ctx->fft, ctx->utmpIn, ctx->utmpOut);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  for (i = info.xs; i < info.xs + info.xm; ++i) {
-    tmpr = utilde[2 * i];
-    tmpi = utilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / Mx;
-    utilde[2 * i] = -SQR(k) * tmpr;
-    utilde[2 * i + 1] = -SQR(k) * tmpi;
-  }
-  ierr = VecRestoreArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  ierr = MatMultTranspose(ctx->fft, ctx->utmpOut, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = VecScale(ctx->utmpIn, 1.0 / Mx);CHKERRQ(ierr);
-  ierr = VecScatterFFTWToPetsc(ctx->fft, ctx->utmpIn, ctx->utmp);CHKERRQ(ierr);
-  ierr = VecStrideScatter(ctx->utmp, 0, G, ADD_VALUES);CHKERRQ(ierr);
+  gu = u_t - c u_x - v
+  gv = v_t - c v_x - u_xx
 
-  ierr = VecStrideGather(X, 1, ctx->utmp, INSERT_VALUES);CHKERRQ(ierr);
-  ierr = VecScatterPetscToFFTW(ctx->fft, ctx->utmp, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = MatMult(ctx->fft, ctx->utmpIn, ctx->utmpOut);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  for (i = info.xs; i < info.xs + info.xm; ++i) {
-    tmpr = utilde[2 * i];
-    tmpi = utilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / Mx;
-    utilde[2 * i] = k * tmpi;
-    utilde[2 * i + 1] = -k * tmpr;
-  }
-  ierr = VecRestoreArray(ctx->utmpOut, &utilde);CHKERRQ(ierr);
-  ierr = MatMultTranspose(ctx->fft, ctx->utmpOut, ctx->utmpIn);CHKERRQ(ierr);
-  ierr = VecScale(ctx->utmpIn, 1.0 / Mx);CHKERRQ(ierr);
-  ierr = VecScatterFFTWToPetsc(ctx->fft, ctx->utmpIn, ctx->utmp);CHKERRQ(ierr);
-  ierr = VecStrideScatter(ctx->utmp, 1, G, ADD_VALUES);CHKERRQ(ierr);
+  The time derivative terms are added in real space, all other terms are
+  dealt with in the frequency domain.
   */
 
+  ierr = scFftTransform(ctx->fftData.fft, X, 0, ctx->fftData.yu);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData.fft, X, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    tmpu.re = utilde[2 * i];
+    tmpu.im = utilde[2 * i + 1];
+    tmpv.re = vtilde[2 * i];
+    tmpv.im = vtilde[2 * i + 1];
+    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
+    utilde[2 * i]     = k * tmpu.im - tmpv.re;
+    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
+    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
+    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
+  }
+  ierr = VecRestoreArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData.fft, G, 0, ctx->fftData.yu);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData.fft, G, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecScale(G, 1.0 / Mx);CHKERRQ(ierr);
+
+  ierr = VecAXPY(G, 1.0, Xdot);CHKERRQ(ierr);
+
+  /*
   ierr = DMGetLocalVector(da,&Xloc);CHKERRQ(ierr);
   ierr = DMGlobalToLocalBegin(da,X,INSERT_VALUES,Xloc);CHKERRQ(ierr);
   ierr = DMGlobalToLocalEnd(da,X,INSERT_VALUES,Xloc);CHKERRQ(ierr);
@@ -336,16 +331,13 @@ PetscErrorCode NPPIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
     uxx    = (-2.0*u + x[i-1].u + x[i+1].u)*sx;
     g[i].u += xdot[i].u - (x[i + 1].u - x[i - 1].u) / (2.0 * hx) - v;
     g[i].v += xdot[i].v - (x[i + 1].v - x[i - 1].v) / (2.0 * hx) - uxx;
-    /*
-    g[i].u += xdot[i].u - x[i].v;
-    g[i].v += xdot[i].v;
-    */
   }
   ierr = PetscLogFlops(4.0*info.xm);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArrayRead(da,Xloc,&x);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArray(da,G,&g);CHKERRQ(ierr);
   ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
+  */
   PetscFunctionReturn(0);
 }
 
@@ -434,7 +426,7 @@ PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, 
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode NPPIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
+PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
   PetscInt       i,c,Mx;
   MatStencil     col = {0}, row = {0};
