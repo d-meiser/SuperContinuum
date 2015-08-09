@@ -86,7 +86,7 @@ int main(int argc,char **argv) {
   PetscFunctionBegin;
   PetscInitialize(&argc,&argv,(char*)0,help);
 
-  user.gamma = 0.010;
+  user.gamma = 0.20;
   user.visualize = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-visualize", &user.visualize, &flg);CHKERRQ(ierr);
   if (user.visualize) {
@@ -259,7 +259,7 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
   DM             da;
   DMDALocalInfo  info;
   PetscErrorCode ierr;
-  PetscInt       i,Mx;
+  PetscInt       i,imin,imax,Mx;
   PetscReal      k;
   struct Cmplx   tmpu, tmpv;
   PetscScalar    *utilde, *vtilde;
@@ -289,9 +289,10 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
   ierr = scFftTransform(ctx->fftData.fft, X, 1, ctx->fftData.yv);CHKERRQ(ierr);
   ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
   ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  /* This loop doesn't work in parallel. Need to figure out proper
-   * indexing */
-  for (i = 0; i < Mx; ++i) {
+  ierr = VecGetOwnershipRange(ctx->fftData.yu, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  for (i = imin; i < imax; ++i) {
     tmpu.re = utilde[2 * i];
     tmpu.im = utilde[2 * i + 1];
     tmpv.re = vtilde[2 * i];
