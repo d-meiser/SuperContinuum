@@ -28,8 +28,6 @@ struct ScFft_ {
   Vec z;
 };
 
-static PetscErrorCode fftGetNumDofs(ScFft fft, PetscInt *dof);
-
 #undef __FUNCT__
 #define __FUNCT__ "scFftCreate"
 PetscErrorCode scFftCreate(DM da, ScFft *fft)
@@ -118,15 +116,5 @@ PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z)
 
   PetscFunctionBegin;
   ierr = MatCreateVecsFFTW(fft->matFft, x, y, z);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-#undef __FUNCT__
-#define __FUNCT__ "fftGetNumDofs"
-PetscErrorCode fftGetNumDofs(ScFft fft, PetscInt *dof) {
-  PetscErrorCode ierr;
-
-  PetscFunctionBegin;
-  ierr = DMDAGetInfo(fft->da, 0, 0, 0, 0, 0, 0, 0, dof, 0, 0, 0, 0, 0);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
