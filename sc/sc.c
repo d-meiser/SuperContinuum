@@ -77,6 +77,7 @@ static PetscErrorCode testSecondDerivative();
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx);
 PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
+static PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y);
 
 int main(int argc,char **argv) {
   TS             ts;
@@ -277,68 +278,39 @@ static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void 
 
 PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
 {
-  PetscErrorCode ierr;
-  PetscInt       i,imin,imax,Mx;
-  PetscReal      k;
-  struct Cmplx   tmpu, tmpv;
-  PetscScalar    *utilde, *vtilde;
-  struct AppCtx  *ctx = ptr;
+  PetscErrorCode        ierr;
+  struct AppCtx         *ctx = ptr;
+  struct JacobianMatMul jctx;
 
   PetscFunctionBeginUser;
+  jctx.fftData = &ctx->fftData;
+  jctx.alpha = 0.0;
   ierr = VecZeroEntries(G);CHKERRQ(ierr);
-  
-  /*
-  Equations:
-
-  gu = u_t - c u_x - v
-  gv = v_t - c v_x - u_xx
-
-  The time derivative terms are added in real space, all other terms are
-  dealt with in the frequency domain.
-  */
-
-  ierr = scFftTransform(ctx->fftData.fft, X, 0, ctx->fftData.yu);CHKERRQ(ierr);
-  ierr = scFftTransform(ctx->fftData.fft, X, 1, ctx->fftData.yv);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecGetOwnershipRange(ctx->fftData.yu, &imin, &imax);CHKERRQ(ierr);
-  imin /= 2;
-  imax /= 2;
-  for (i = imin; i < imax; ++i) {
-    tmpu.re = utilde[2 * i];
-    tmpu.im = utilde[2 * i + 1];
-    tmpv.re = vtilde[2 * i];
-    tmpv.im = vtilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
-    utilde[2 * i]     = k * tmpu.im - tmpv.re;
-    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
-    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
-    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
-  }
-  ierr = VecRestoreArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecRestoreArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData.fft, G, 0, ctx->fftData.yu);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData.fft, G, 1, ctx->fftData.yv);CHKERRQ(ierr);
-  ierr = VecGetSize(G, &Mx);CHKERRQ(ierr);
-  ierr = VecScale(G, 1.0 / Mx);CHKERRQ(ierr);
-
+  ierr = matrixFreeJacobianImpl(&jctx, X, G);
   ierr = VecAXPY(G, 1.0, Xdot);CHKERRQ(ierr);
-
   PetscFunctionReturn(0);
 }
 
 PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
 {
   PetscErrorCode        ierr;
-  PetscInt              i,imin,imax,Mx;
-  PetscReal             k;
-  struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde;
   struct JacobianMatMul *ctx;
 
   PetscFunctionBegin;
   ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
+  ierr = matrixFreeJacobianImpl(ctx, x, y);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
 
+PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y)
+{
+  PetscErrorCode        ierr;
+  PetscInt              i,imin,imax,Mx;
+  PetscReal             k;
+  struct Cmplx          tmpu, tmpv;
+  PetscScalar           *utilde, *vtilde;
+
+  PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
   
   /*
