@@ -43,13 +43,18 @@ struct FftData {
   Vec zv;
 };
 
+struct JacobianMatMul {
+  PetscScalar    alpha;
+  struct FftData *fftData;
+};
+
 struct AppCtx {
-  PetscScalar    l;
-  PetscBool      visualize;
-  PetscViewer    viewer;
-  PetscReal      gamma;
-  struct FftData fftData;
-  PetscReal      alpha;
+  PetscScalar           l;
+  PetscBool             visualize;
+  PetscViewer           viewer;
+  PetscReal             gamma;
+  struct FftData        fftData;
+  struct JacobianMatMul jctx;
 };
 
 struct Field {
@@ -110,6 +115,7 @@ int main(int argc,char **argv) {
   ierr = scFftCreate(da, &user.fftData.fft);CHKERRQ(ierr);
   ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xu, &user.fftData.yu, &user.fftData.zu);CHKERRQ(ierr);
   ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xv, &user.fftData.yv, &user.fftData.zv);CHKERRQ(ierr);
+  user.jctx.fftData = &user.fftData;
 
   ierr = TSCreate(PETSC_COMM_WORLD,&ts);CHKERRQ(ierr);
   ierr = TSSetDM(ts,da);CHKERRQ(ierr);
@@ -127,7 +133,7 @@ int main(int argc,char **argv) {
   ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &M, &N);CHKERRQ(ierr);
-  ierr = MatCreateShell(PETSC_COMM_WORLD, m, n, M, N, &user, &J);CHKERRQ(ierr);
+  ierr = MatCreateShell(PETSC_COMM_WORLD, m, n, M, N, &user.jctx, &J);CHKERRQ(ierr);
   ierr = MatShellSetOperation(J, MATOP_MULT, (void (*)(void))matrixFreeJacobian);CHKERRQ(ierr);
 
 
@@ -323,12 +329,12 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
 
 PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
 {
-  PetscErrorCode ierr;
-  PetscInt       i,imin,imax,Mx;
-  PetscReal      k;
-  struct Cmplx   tmpu, tmpv;
-  PetscScalar    *utilde, *vtilde;
-  struct AppCtx  *ctx;
+  PetscErrorCode        ierr;
+  PetscInt              i,imin,imax,Mx;
+  PetscReal             k;
+  struct Cmplx          tmpu, tmpv;
+  PetscScalar           *utilde, *vtilde;
+  struct JacobianMatMul *ctx;
 
   PetscFunctionBegin;
   ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
@@ -345,11 +351,11 @@ PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
   dealt with in the frequency domain.
   */
 
-  ierr = scFftTransform(ctx->fftData.fft, x, 0, ctx->fftData.yu);CHKERRQ(ierr);
-  ierr = scFftTransform(ctx->fftData.fft, x, 1, ctx->fftData.yv);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecGetOwnershipRange(ctx->fftData.yu, &imin, &imax);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData->fft, x, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData->fft, x, 1, ctx->fftData->yv);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(ctx->fftData->yu, &imin, &imax);CHKERRQ(ierr);
   imin /= 2;
   imax /= 2;
   for (i = imin; i < imax; ++i) {
@@ -363,10 +369,10 @@ PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
     vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
     vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
   }
-  ierr = VecRestoreArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecRestoreArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData.fft, y, 0, ctx->fftData.yu);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData.fft, y, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
   ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
   ierr = VecScale(y, 1.0 / Mx);CHKERRQ(ierr);
 
@@ -525,7 +531,7 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
-  ((struct AppCtx*)ctx)->alpha = a;
+  ((struct AppCtx*)ctx)->jctx.alpha = a;
 
   PetscFunctionReturn(0);
 }
