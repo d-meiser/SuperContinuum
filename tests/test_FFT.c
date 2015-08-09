@@ -91,6 +91,44 @@ Ensure(forward_transform_yields_constant_vector_from_delta_function)
   DMDestroy(&da);
 }
 
+Ensure(second_component_transforms_ok)
+{
+  ScFft fft;
+  DM da;
+  Vec v;
+
+  DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,4,2,1,NULL,&da);
+
+  DMCreateGlobalVector(da, &v);
+  VecZeroEntries(v); 
+  VecSetValue(v, 1, 0.7, INSERT_VALUES);
+  VecAssemblyBegin(v);
+  VecAssemblyEnd(v);
+
+  scFftCreate(da, &fft);
+
+  Vec x, y, z;
+  scFftCreateVecsFFTW(fft, &x, &y, &z);
+
+  scFftTransform(fft, v, 1, y);
+  const PetscScalar *arr;
+  VecGetArrayRead(y, &arr);
+  assert_that(fabs(arr[0] - 0.7) < 1.0e-6, is_true);
+  assert_that(fabs(arr[1] - 0.0) < 1.0e-6, is_true);
+  assert_that(fabs(arr[1] - 0.7) < 1.0e-6, is_true);
+  assert_that(fabs(arr[2] - 0.0) < 1.0e-6, is_true);
+  assert_that(fabs(arr[3] - 0.7) < 1.0e-6, is_true);
+  assert_that(fabs(arr[4] - 0.0) < 1.0e-6, is_true);
+  VecRestoreArrayRead(y, &arr);
+
+  VecDestroy(&x);
+  VecDestroy(&y);
+  VecDestroy(&z);
+  VecDestroy(&v);
+  scFftDestroy(&fft);
+  DMDestroy(&da);
+}
+
 Ensure(i_transform_is_inverse_of_transform)
 {
   ScFft fft;
@@ -119,9 +157,9 @@ Ensure(i_transform_is_inverse_of_transform)
   scFftTransform(fft, v, component, y);
   scFftITransform(fft, v, component, y);
   VecAXPY(v, -dim, vIn);
-  PetscReal nrm;
-  VecStrideNorm(v, component, NORM_INFINITY, &nrm);
-  assert_that(nrm < 1.0e-6, is_true);
+  PetscReal error;
+  VecStrideNorm(v, component, NORM_INFINITY, &error);
+  assert_that(error < 1.0e-6, is_true);
 
   VecDestroy(&x);
   VecDestroy(&y);
@@ -159,6 +197,7 @@ int main(int argc, char **argv)
   add_test(suite, the_right_dm_gets_registered_with_fft);
   add_test(suite, output_vector_has_correct_size);
   add_test(suite, forward_transform_yields_constant_vector_from_delta_function);
+  add_test(suite, second_component_transforms_ok);
   add_test(suite, i_transform_is_inverse_of_transform);
   int result = run_test_suite(suite, create_text_reporter());
   PetscFinalize();
