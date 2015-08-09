@@ -51,12 +51,15 @@ struct JacobianMatMul {
 
 struct AppCtx {
   PetscScalar           l;
-  PetscBool             visualize;
+  PetscBool             monitorRealSpace;
+  PetscBool             monitorSpectrum;
   PetscBool             useFourthOrder;
-  PetscViewer           viewer;
+  PetscViewer           viewerRealSpace;
+  PetscViewer           viewerSpectrum;
   PetscReal             gamma;
   struct FftData        fftData;
   struct JacobianMatMul jctx;
+  Vec                   psd;
 };
 
 struct Field {
@@ -82,6 +85,7 @@ static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J, void 
 PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
 static PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y);
 static PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax);
+static PetscErrorCode computePSD(ScFft fft, Vec v, PetscInt component, Vec work, Vec psd);
 
 int main(int argc,char **argv) {
   TS             ts;
@@ -101,15 +105,26 @@ int main(int argc,char **argv) {
 
   user.gamma = 0.20;
   ierr = PetscOptionsGetReal("", "-gamma", &user.gamma, &flg);CHKERRQ(ierr);
-  user.visualize = PETSC_FALSE;
-  ierr = PetscOptionsGetBool("", "-visualize", &user.visualize, &flg);CHKERRQ(ierr);
-  if (user.visualize) {
-    ierr = PetscViewerDrawOpen(PETSC_COMM_WORLD,0,"", 80, 380, 400, 160, &user.viewer);CHKERRQ(ierr);
-    ierr = PetscViewerDrawGetDraw(user.viewer,0,&draw);CHKERRQ(ierr);
+
+  user.monitorRealSpace = PETSC_FALSE;
+  ierr = PetscOptionsGetBool("", "-monitor_real_space", &user.monitorRealSpace, &flg);CHKERRQ(ierr);
+  if (user.monitorRealSpace) {
+    ierr = PetscViewerDrawOpen(PETSC_COMM_WORLD,0,"", 80, 380, 400, 160, &user.viewerRealSpace);CHKERRQ(ierr);
+    ierr = PetscViewerDrawGetDraw(user.viewerRealSpace,0,&draw);CHKERRQ(ierr);
     ierr = PetscDrawSetDoubleBuffer(draw);CHKERRQ(ierr);
   }
+
+  user.monitorSpectrum = PETSC_FALSE;
+  ierr = PetscOptionsGetBool("", "-monitor_spectrum", &user.monitorSpectrum, &flg);CHKERRQ(ierr);
+  if (user.monitorSpectrum) {
+    ierr = PetscViewerDrawOpen(PETSC_COMM_WORLD,0,"", 80, 380, 400, 160, &user.viewerSpectrum);CHKERRQ(ierr);
+    ierr = PetscViewerDrawGetDraw(user.viewerSpectrum,0,&draw);CHKERRQ(ierr);
+    ierr = PetscDrawSetDoubleBuffer(draw);CHKERRQ(ierr);
+  }
+
   useColoring = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-use_coloring", &useColoring, &flg);CHKERRQ(ierr);
+
   user.useFourthOrder = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-use_fourth_order", &user.useFourthOrder, &flg);CHKERRQ(ierr);
 
@@ -123,6 +138,13 @@ int main(int argc,char **argv) {
 
   ierr = DMCreateGlobalVector(da,&x);CHKERRQ(ierr);
   ierr = VecDuplicate(x,&r);CHKERRQ(ierr);
+  if (user.monitorSpectrum) {
+    ierr = VecCreate(PETSC_COMM_WORLD, &user.psd);CHKERRQ(ierr);
+    ierr = VecSetFromOptions(user.psd);CHKERRQ(ierr);
+    PetscInt dim;
+    ierr = VecGetSize(x, &dim);CHKERRQ(ierr);
+    ierr = VecSetSizes(user.psd, PETSC_DECIDE, dim / 4);CHKERRQ(ierr);
+  }
 
   ierr = scFftCreate(da, &user.fftData.fft);CHKERRQ(ierr);
   ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xu, &user.fftData.yu, &user.fftData.zu);CHKERRQ(ierr);
@@ -187,8 +209,11 @@ int main(int argc,char **argv) {
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = MatDestroy(&J);CHKERRQ(ierr);
   ierr = MatDestroy(&Jprec);CHKERRQ(ierr);
-  if (user.visualize) {
-    ierr = PetscViewerDestroy(&user.viewer);CHKERRQ(ierr);
+  if (user.monitorRealSpace) {
+    ierr = PetscViewerDestroy(&user.viewerRealSpace);CHKERRQ(ierr);
+  }
+  if (user.monitorSpectrum) {
+    ierr = PetscViewerDestroy(&user.viewerSpectrum);CHKERRQ(ierr);
   }
 
   ierr = PetscFinalize();
@@ -642,12 +667,16 @@ PetscErrorCode MyTSMonitor(TS ts,PetscInt step,PetscReal ptime,Vec v,void *ctx)
   struct AppCtx* appCtx = ctx;
 
   PetscFunctionBeginUser;
-  ierr = VecNorm(v,NORM_2,&norm);CHKERRQ(ierr);
+  ierr = VecStrideNorm(v,0,NORM_2,&norm);CHKERRQ(ierr);
   ierr = PetscObjectGetComm((PetscObject)ts,&comm);CHKERRQ(ierr);
   ierr = TSGetTimeStep(ts, &dt);CHKERRQ(ierr);
   ierr = PetscPrintf(comm,"timestep %D time %g (dt = %g) norm %g\n",step,(double)ptime,(double)dt,(double)norm);CHKERRQ(ierr);
-  if (appCtx->visualize) {
-    ierr = VecView(v, appCtx->viewer);CHKERRQ(ierr);
+  if (appCtx->monitorRealSpace) {
+    ierr = VecView(v, appCtx->viewerRealSpace);CHKERRQ(ierr);
+  }
+  if (appCtx->monitorSpectrum) {
+    computePSD(appCtx->fftData.fft, v, 0, appCtx->fftData.yu, appCtx->psd);
+    VecView(appCtx->psd, appCtx->viewerSpectrum);
   }
   PetscFunctionReturn(0);
 }
@@ -690,5 +719,35 @@ static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr)
   ierr = DMRestoreGlobalVector(da, &X);CHKERRQ(ierr);
   ierr = MatDestroy(&J);CHKERRQ(ierr);
 
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode computePSD(ScFft fft, Vec v, PetscInt component, Vec work, Vec psd) {
+  PetscErrorCode ierr;
+  PetscInt       i, imin, imax;
+  struct Cmplx   *w;
+  IS             realParts;
+  VecScatter     realPartsScatter;
+  MPI_Comm       comm;
+
+  PetscFunctionBegin;
+  ierr = VecZeroEntries(psd);CHKERRQ(ierr);
+  ierr = scFftTransform(fft, v, component, work);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(work, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  ierr = VecGetArray(work, (PetscScalar**)&w);CHKERRQ(ierr);
+  for (i = imin; i < imax; ++i) {
+    w[i].re = w[i].re * w[i].re + w[i].im * w[i].im;
+  }
+  ierr = VecRestoreArray(work, (PetscScalar**)&w);CHKERRQ(ierr);
+
+  ierr = PetscObjectGetComm((PetscObject)work,&comm);CHKERRQ(ierr);
+  ierr = ISCreateStride(comm,  (imax - imin) / 2, 2 * imin, 2, &realParts);CHKERRQ(ierr);
+  ierr = VecScatterCreate(work, realParts, psd, 0, &realPartsScatter);CHKERRQ(ierr);
+  ierr = VecScatterBegin(realPartsScatter, work, psd, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
+  ierr = VecScatterEnd(realPartsScatter, work, psd, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
+  ierr = VecScatterDestroy(&realPartsScatter);CHKERRQ(ierr);
+  ierr = ISDestroy(&realParts);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
