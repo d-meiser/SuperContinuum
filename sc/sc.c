@@ -49,6 +49,7 @@ struct AppCtx {
   PetscViewer    viewer;
   PetscReal      gamma;
   struct FftData fftData;
+  PetscReal      alpha;
 };
 
 struct Field {
@@ -70,11 +71,12 @@ static PetscErrorCode testFirstDerivative();
 static PetscErrorCode testSecondDerivative();
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx);
+PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
 
 int main(int argc,char **argv) {
   TS             ts;
   Vec            x,r;
-  PetscInt       steps,maxsteps = 100;
+  PetscInt       steps, maxsteps = 100, m, n, M, N;
   PetscErrorCode ierr;
   DM             da;
   PetscReal      ftime;
@@ -118,15 +120,16 @@ int main(int argc,char **argv) {
   ierr = TSSetRHSJacobian(ts,Jrhs,Jrhs,SCRHSJacobian,&user);CHKERRQ(ierr);
   ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
 
-  ierr = DMCreateMatrix(da,&J);CHKERRQ(ierr);
-  ierr = buildConstantPartOfJacobian(da, J, &user);CHKERRQ(ierr);
-  ierr = MatSetOption(J, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
-  ierr = MatStoreValues(J);CHKERRQ(ierr);
-
+  /* build preconditioner for Jacobian; this is an assembled matrix */
   ierr = DMCreateMatrix(da,&Jprec);CHKERRQ(ierr);
   ierr = buildConstantPartOfJacobian(da, Jprec, &user);CHKERRQ(ierr);
   ierr = MatSetOption(Jprec, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
   ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
+  ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
+  ierr = MatGetLocalSize(Jprec, &M, &N);CHKERRQ(ierr);
+  ierr = MatCreateShell(PETSC_COMM_WORLD, m, n, M, N, &user, &J);CHKERRQ(ierr);
+  ierr = MatShellSetOperation(J, MATOP_MULT, (void (*)(void))matrixFreeJacobian);CHKERRQ(ierr);
+
 
   if (!useColoring) {
     ierr = TSSetIJacobian(ts,J,Jprec,SCIJacobian,&user);CHKERRQ(ierr);
@@ -268,8 +271,6 @@ static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void 
 
 PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
 {
-  DM             da;
-  DMDALocalInfo  info;
   PetscErrorCode ierr;
   PetscInt       i,imin,imax,Mx;
   PetscReal      k;
@@ -278,10 +279,6 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
   struct AppCtx  *ctx = ptr;
 
   PetscFunctionBeginUser;
-  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
-  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
-
   ierr = VecZeroEntries(G);CHKERRQ(ierr);
   
   /*
@@ -316,9 +313,64 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
   ierr = VecRestoreArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
   ierr = scFftITransform(ctx->fftData.fft, G, 0, ctx->fftData.yu);CHKERRQ(ierr);
   ierr = scFftITransform(ctx->fftData.fft, G, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecGetSize(G, &Mx);CHKERRQ(ierr);
   ierr = VecScale(G, 1.0 / Mx);CHKERRQ(ierr);
 
   ierr = VecAXPY(G, 1.0, Xdot);CHKERRQ(ierr);
+
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
+{
+  PetscErrorCode ierr;
+  PetscInt       i,imin,imax,Mx;
+  PetscReal      k;
+  struct Cmplx   tmpu, tmpv;
+  PetscScalar    *utilde, *vtilde;
+  struct AppCtx  *ctx;
+
+  PetscFunctionBegin;
+  ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
+
+  ierr = VecZeroEntries(y);CHKERRQ(ierr);
+  
+  /*
+  Equations:
+
+  gu = u_t - c u_x - v
+  gv = v_t - c v_x - u_xx
+
+  The time derivative terms are added in real space, all other terms are
+  dealt with in the frequency domain.
+  */
+
+  ierr = scFftTransform(ctx->fftData.fft, x, 0, ctx->fftData.yu);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData.fft, x, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(ctx->fftData.yu, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  for (i = imin; i < imax; ++i) {
+    tmpu.re = utilde[2 * i];
+    tmpu.im = utilde[2 * i + 1];
+    tmpv.re = vtilde[2 * i];
+    tmpv.im = vtilde[2 * i + 1];
+    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
+    utilde[2 * i]     = k * tmpu.im - tmpv.re;
+    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
+    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
+    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
+  }
+  ierr = VecRestoreArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData.fft, y, 0, ctx->fftData.yu);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData.fft, y, 1, ctx->fftData.yv);CHKERRQ(ierr);
+  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
+  ierr = VecScale(y, 1.0 / Mx);CHKERRQ(ierr);
+
+  ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
 
   PetscFunctionReturn(0);
 }
@@ -448,8 +500,8 @@ PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx)
 PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
   PetscInt       i,c,Mx;
-  MatStencil     col = {0}, row = {0};
-  PetscScalar    v,hx;
+  MatStencil     col = {0};
+  PetscScalar    v;
   PetscErrorCode ierr;
   DMDALocalInfo  info;
   DM             da;
@@ -473,21 +525,8 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
-  if (J != Jpre) {
-    ierr = MatZeroEntries(J);CHKERRQ(ierr);
-    ierr = MatRetrieveValues(J);CHKERRQ(ierr);
-/* Time derivative terms */
-    v = a;
-    for (i = info.xs; i < info.xs + info.xm; ++i) {
-      col.i = i;
-      for (c = 0; c < 2; ++c) {
-        col.c = c;
-        ierr=MatSetValuesStencil(J,1,&col,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-      }
-    }
-    ierr = MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  }
+  ((struct AppCtx*)ctx)->alpha = a;
+
   PetscFunctionReturn(0);
 }
 
