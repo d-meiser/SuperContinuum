@@ -73,7 +73,7 @@ static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
 int main(int argc,char **argv) {
   TS             ts;
   Vec            x,r;
-  PetscInt       steps,maxsteps = 100,nlocal,nglobal;
+  PetscInt       steps,maxsteps = 100;
   PetscErrorCode ierr;
   DM             da;
   PetscReal      ftime;
@@ -263,9 +263,6 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
   PetscReal      k;
   struct Cmplx   tmpu, tmpv;
   PetscScalar    *utilde, *vtilde;
-  PetscScalar    u,uxx,v;
-  struct Field   *x, *xdot, *g;
-  Vec            Xloc;
   struct AppCtx  *ctx = ptr;
 
   PetscFunctionBeginUser;
@@ -503,7 +500,6 @@ PetscErrorCode MyTSMonitor(TS ts,PetscInt step,PetscReal ptime,Vec v,void *ctx)
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr)
 {
   DM             da;
-  DMDALocalInfo  info;
   PetscErrorCode ierr;
   Vec            X, Xdot, GIfunc, GJfunc;
   PetscRandom    rdm;
