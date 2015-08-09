@@ -1,7 +1,7 @@
 #!/bin/sh
 PETSC_TAR_BALL=petsc-lite-3.6.1.tar.gz
 PETSC_RELEASE_URL=http://ftp.mcs.anl.gov/pub/petsc/release-snapshots
-PETSC_ARCH=double-dbg
+PETSC_ARCH=${PETSC_ARCH:-double-dbg}
 PETSC_DIR=`pwd`/petsc-3.6.1
 
 WITH_X=${WITH_X:-0}
@@ -30,7 +30,7 @@ if [ ! -e $PETSC_LIBRARY ]; then
     --download-mpich=1 \
     --with-mpiuni-fortran-binding=0 \
     --with-fortran-interfaces
-  make PETSC_DIR=`pwd` PETSC_ARCH=double-dbg all
+  make PETSC_DIR=`pwd` PETSC_ARCH=$PETSC_ARCH all
   cd -
 else
   echo "$PETSC_LIBRARY found - skipping configuration and build."
