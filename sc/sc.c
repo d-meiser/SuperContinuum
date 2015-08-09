@@ -28,6 +28,7 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 
 #define SQR(a) ((a) * (a))
 
+
 struct Cmplx {
   PetscScalar re;
   PetscScalar im;
@@ -51,6 +52,7 @@ struct JacobianMatMul {
 struct AppCtx {
   PetscScalar           l;
   PetscBool             visualize;
+  PetscBool             useFourthOrder;
   PetscViewer           viewer;
   PetscReal             gamma;
   struct FftData        fftData;
@@ -65,19 +67,21 @@ struct Field {
 
 static PetscErrorCode FormInitialSolution(DM,Vec);
 static PetscErrorCode MyTSMonitor(TS,PetscInt,PetscReal,Vec,void*);
-static PetscErrorCode SCRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr);
-static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr);
 static PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X,Vec Xdot,Vec G,void *ptr);
 static PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx);
 PETSC_STATIC_INLINE PetscScalar initialState(PetscReal x);
 static PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
+static PetscErrorCode addFirstDerivativeFourthOrder(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
 static PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alph, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
+static PetscErrorCode addSecondDerivativeFourthOrder(DM da, Mat m, PetscReal alph, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
 static PetscErrorCode testFirstDerivative();
 static PetscErrorCode testSecondDerivative();
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx);
+static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J, void *ctx);
 PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
 static PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y);
+static PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax);
 
 int main(int argc,char **argv) {
   TS             ts;
@@ -88,7 +92,7 @@ int main(int argc,char **argv) {
   PetscReal      ftime;
   SNES           ts_snes;
   struct AppCtx  user;
-  Mat            J,Jprec,Jrhs;
+  Mat            J,Jprec;
   PetscDraw      draw;
   PetscBool      useColoring, flg;
 
@@ -96,6 +100,7 @@ int main(int argc,char **argv) {
   PetscInitialize(&argc,&argv,(char*)0,help);
 
   user.gamma = 0.20;
+  ierr = PetscOptionsGetReal("", "-gamma", &user.gamma, &flg);CHKERRQ(ierr);
   user.visualize = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-visualize", &user.visualize, &flg);CHKERRQ(ierr);
   if (user.visualize) {
@@ -105,8 +110,14 @@ int main(int argc,char **argv) {
   }
   useColoring = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-use_coloring", &useColoring, &flg);CHKERRQ(ierr);
+  user.useFourthOrder = PETSC_FALSE;
+  ierr = PetscOptionsGetBool("", "-use_fourth_order", &user.useFourthOrder, &flg);CHKERRQ(ierr);
 
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,-1024,2,1,NULL,&da);CHKERRQ(ierr);
+  if (user.useFourthOrder) {
+    ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,-1024,2,2,NULL,&da);CHKERRQ(ierr);
+  } else {
+    ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,-1024,2,1,NULL,&da);CHKERRQ(ierr);
+  }
   ierr = DMDASetFieldName(da,0,"u");CHKERRQ(ierr);
   ierr = DMDASetFieldName(da,1,"v");CHKERRQ(ierr);
 
@@ -122,14 +133,14 @@ int main(int argc,char **argv) {
   ierr = TSSetDM(ts,da);CHKERRQ(ierr);
   ierr = TSSetType(ts,TSARKIMEX);CHKERRQ(ierr);
   ierr = TSSetProblemType(ts,TS_NONLINEAR);CHKERRQ(ierr);
-  ierr = TSSetRHSFunction(ts, NULL, SCRHSFunction,&user);CHKERRQ(ierr);
-  ierr = DMCreateMatrix(da,&Jrhs);CHKERRQ(ierr);
-  ierr = TSSetRHSJacobian(ts,Jrhs,Jrhs,SCRHSJacobian,&user);CHKERRQ(ierr);
-  ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
 
-  /* build preconditioner for Jacobian; this is an assembled matrix */
+  ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
   ierr = DMCreateMatrix(da,&Jprec);CHKERRQ(ierr);
-  ierr = buildConstantPartOfJacobian(da, Jprec, &user);CHKERRQ(ierr);
+  if (user.useFourthOrder) {
+  ierr = buildConstantPartOfJacobianFourthOrder(da, Jprec, &user);CHKERRQ(ierr);
+  } else {
+    ierr = buildConstantPartOfJacobian(da, Jprec, &user);CHKERRQ(ierr);
+  }
   ierr = MatSetOption(Jprec, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
   ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
@@ -176,7 +187,6 @@ int main(int argc,char **argv) {
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = MatDestroy(&J);CHKERRQ(ierr);
   ierr = MatDestroy(&Jprec);CHKERRQ(ierr);
-  ierr = MatDestroy(&Jrhs);CHKERRQ(ierr);
   if (user.visualize) {
     ierr = PetscViewerDestroy(&user.viewer);CHKERRQ(ierr);
   }
@@ -219,75 +229,38 @@ PetscErrorCode testSecondDerivative() {
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode SCRHSFunction(TS ts,PetscReal t,Vec X,Vec F,void *ptr)
+PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
 {
-  DM             da;
-  DMDALocalInfo  info;
-  PetscErrorCode ierr;
-  struct Field   *x, *f;
-  struct AppCtx  *ctx = ptr;
-  PetscInt       i;
+  PetscErrorCode        ierr;
+  DM                    da;
+  DMDALocalInfo         info;
+  struct AppCtx         *ctx = ptr;
+  struct JacobianMatMul jctx;
+  PetscInt              i;
+  struct Field          *x, *f;
 
   PetscFunctionBeginUser;
+  ierr = VecZeroEntries(F);CHKERRQ(ierr);
+
+  /* linear term */
+  jctx.fftData = &ctx->fftData;
+  jctx.alpha = 0.0;
+  ierr = matrixFreeJacobianImpl(&jctx, X, F);
+
+  /* Nonlinear term */
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da,F,&f);CHKERRQ(ierr);
   for (i = info.xs; i < info.xs + info.xm; ++i) {
-    f[i].u += ctx->gamma * SQR(x[i].u) * x[i].u;
+    f[i].u += -ctx->gamma * SQR(x[i].u) * x[i].u;
   }
   ierr = DMDAVecRestoreArray(da,F,&f);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
 
-static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void *ptr)
-{
-  PetscInt       i;
-  MatStencil     col = {0}, row = {0};
-  PetscScalar    v;
-  PetscErrorCode ierr;
-  DMDALocalInfo  info;
-  DM             da;
-  struct Field   *x;
-  struct AppCtx  *ctx = ptr;
+  /* Time derivative term */
+  ierr = VecAXPY(F, 1.0, Xdot);CHKERRQ(ierr);
 
-  PetscFunctionBegin;
-  ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
-  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
-  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-
-  row.c = 0;
-  col.c = 0;
-  ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    row.i = i;
-    col.i = i;
-    v = 3.0 * ctx->gamma * SQR(x[i].u);
-    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-  }
-  ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
-  ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  if (J != Jpre) {
-    ierr = MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-    ierr = MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  }
-  PetscFunctionReturn(0);
-}
-
-PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
-{
-  PetscErrorCode        ierr;
-  struct AppCtx         *ctx = ptr;
-  struct JacobianMatMul jctx;
-
-  PetscFunctionBeginUser;
-  jctx.fftData = &ctx->fftData;
-  jctx.alpha = 0.0;
-  ierr = VecZeroEntries(G);CHKERRQ(ierr);
-  ierr = matrixFreeJacobianImpl(&jctx, X, G);
-  ierr = VecAXPY(G, 1.0, Xdot);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -395,6 +368,38 @@ PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, P
   PetscFunctionReturn(0);
 }
 
+PetscErrorCode addFirstDerivativeFourthOrder(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp)
+{
+  DMDALocalInfo  info;
+  PetscInt       i, ii, Mx;
+  MatStencil     col[4] = {{0}},row = {0};
+  PetscErrorCode ierr;
+  PetscScalar    v[4] = {
+    1.0 * alpha / (12.0 * hx),
+    -8.0 * alpha / (12.0 * hx),
+    8.0 * alpha / (12.0 * hx),
+    -1.0 * alpha / (12.0 * hx)
+  };
+
+  PetscFunctionBegin;
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  row.c = rcomp;
+  for (ii = 0; ii < 4; ++ii) {
+    col[ii].c = ccomp;
+  }
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    row.i = i;
+    col[0].i = clamp(i - 2, 0, Mx);
+    col[1].i = clamp(i - 1, 0, Mx);
+    col[2].i = clamp(i + 1, 0, Mx);
+    col[3].i = clamp(i + 2, 0, Mx);
+    ierr = MatSetValuesStencil(m, 1, &row, 4, col, v, ADD_VALUES);CHKERRQ(ierr);
+  }
+  PetscFunctionReturn(0);
+}
+
 PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp)
 {
   DMDALocalInfo  info;
@@ -442,6 +447,50 @@ PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, 
   PetscFunctionReturn(0);
 }
 
+PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax)
+{
+  PetscInt L = imax - imin;
+  if (i < imin) {
+    i += L;
+  }
+  if (i >= imax) {
+    i -= L;
+  }
+  return i;
+}
+
+PetscErrorCode addSecondDerivativeFourthOrder(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp)
+{
+  DMDALocalInfo  info;
+  PetscInt       i, ii, Mx;
+  MatStencil     col[3] = {{0}},row = {0};
+  PetscErrorCode ierr;
+  PetscScalar    v[5] = {
+    -alpha / (12.0 * SQR(hx)),
+    16.0 * alpha /(12.0 * SQR(hx)),
+    -30.0 * alpha /(12.0 * SQR(hx)),
+    16.0 * alpha / (12.0 * SQR(hx)),
+    -alpha / (12.0 * SQR(hx))
+  };
+
+  PetscFunctionBegin;
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  row.c = rcomp;
+  for (ii = 0; ii < 5; ++ii) {
+    col[ii].c = ccomp;
+  }
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    row.i = i;
+    for (ii = 0; ii < 5; ++ii) {
+      col[ii].i = clamp(i - 2 + ii, 0, Mx);
+    }
+    ierr = MatSetValuesStencil(m, 1, &row, 5, col, v, ADD_VALUES);CHKERRQ(ierr);
+  }
+  PetscFunctionReturn(0);
+}
+
 PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx)
 {
   PetscErrorCode ierr;
@@ -475,14 +524,49 @@ PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx)
   PetscFunctionReturn(0);
 }
 
+PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J, void *ctx)
+{
+  PetscErrorCode ierr;
+  PetscInt       i, Mx;
+  MatStencil     col = {0}, row = {0};
+  PetscScalar    v, hx;
+  DMDALocalInfo  info;
+
+  PetscFunctionBegin;
+  ierr = MatZeroEntries(J);CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  hx = 1.0/(PetscReal)(Mx-1);
+  ierr = addSecondDerivativeFourthOrder(da, J, -1.0, hx, 1, 0);CHKERRQ(ierr);
+  ierr = addFirstDerivativeFourthOrder(da, J, -1.0, hx, 0, 0);CHKERRQ(ierr);
+  ierr = addFirstDerivativeFourthOrder(da, J, -1.0, hx, 1, 1);CHKERRQ(ierr);
+
+  /* Auxiliary variable relation */
+  v = -1.0;
+  row.c = 0;
+  col.c = 1;
+  for (i=info.xs; i<info.xs+info.xm; i++) {
+    row.i = i;
+    col.i = i;
+    ierr=MatSetValuesStencil(J,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+
+  ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
 PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
   PetscInt       i,c,Mx;
-  MatStencil     col = {0};
+  MatStencil     col = {0}, row = {0};
   PetscScalar    v;
   PetscErrorCode ierr;
   DMDALocalInfo  info;
   DM             da;
+  struct Field   *x;
+  struct AppCtx  *user = ctx;
 
   PetscFunctionBegin;
   ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
@@ -490,6 +574,18 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
+
+  /* Non-linear term */
+  row.c = 0;
+  col.c = 0;
+  ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
+  for (i=info.xs; i<info.xs+info.xm; i++) {
+    row.i = i;
+    col.i = i;
+    v = -3.0 * user->gamma * SQR(x[i].u);
+    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+  ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
 
   /* Time derivative terms */
   v = a;
