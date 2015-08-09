@@ -68,6 +68,7 @@ static PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscRea
 static PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alph, PetscReal hx, PetscInt rcomp, PetscInt ccomp);
 static PetscErrorCode testFirstDerivative();
 static PetscErrorCode testSecondDerivative();
+static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
 
 int main(int argc,char **argv) {
   TS             ts;
@@ -96,7 +97,7 @@ int main(int argc,char **argv) {
   useColoring = PETSC_FALSE;
   ierr = PetscOptionsGetBool("", "-use_coloring", &useColoring, &flg);CHKERRQ(ierr);
 
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,-1024,2,1,NULL,&da);CHKERRQ(ierr);
+  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,-1024,2,1,NULL,&da);CHKERRQ(ierr);
   ierr = DMDASetFieldName(da,0,"u");CHKERRQ(ierr);
   ierr = DMDASetFieldName(da,1,"v");CHKERRQ(ierr);
 
@@ -137,6 +138,8 @@ int main(int argc,char **argv) {
 
   ierr = TSSetFromOptions(ts);CHKERRQ(ierr);
 
+  ierr = checkIFunctionAndJacobianConsistent(ts, &user);CHKERRQ(ierr);
+
   ierr = TSSolve(ts,x);CHKERRQ(ierr);
   ierr = TSGetSolveTime(ts,&ftime);CHKERRQ(ierr);
   ierr = TSGetTimeStepNumber(ts,&steps);CHKERRQ(ierr);
@@ -166,7 +169,7 @@ PetscErrorCode testFirstDerivative() {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,5,2,1,NULL,&dm);CHKERRQ(ierr);
+  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,5,2,1,NULL,&dm);CHKERRQ(ierr);
   ierr = DMCreateMatrix(dm, &m);CHKERRQ(ierr);
   ierr = addFirstDerivative(dm, m, 1.0, 1.0, 0, 0);CHKERRQ(ierr);
   ierr = MatAssemblyBegin(m, MAT_FINAL_ASSEMBLY);
@@ -183,7 +186,7 @@ PetscErrorCode testSecondDerivative() {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,5,2,1,NULL,&dm);CHKERRQ(ierr);
+  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,5,2,1,NULL,&dm);CHKERRQ(ierr);
   ierr = DMCreateMatrix(dm, &m);CHKERRQ(ierr);
   ierr = addSecondDerivative(dm, m, 1.0, 1.0, 1, 0);CHKERRQ(ierr);
   ierr = MatAssemblyBegin(m, MAT_FINAL_ASSEMBLY);
@@ -251,13 +254,13 @@ static PetscErrorCode SCRHSJacobian(TS ts,PetscReal t,Vec X,Mat J,Mat Jpre,void 
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
+PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G, void *ptr)
 {
   DM             da;
   DMDALocalInfo  info;
   PetscErrorCode ierr;
   PetscInt       i,Mx;
-  PetscReal      hx,sx,k;
+  PetscReal      k;
   struct Cmplx   tmpu, tmpv;
   PetscScalar    *utilde, *vtilde;
   PetscScalar    u,uxx,v;
@@ -269,8 +272,6 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
-  hx = 1.0/(PetscReal)(Mx-1);
-  sx = 1.0/(hx*hx);
 
   ierr = VecZeroEntries(G);CHKERRQ(ierr);
   
@@ -288,7 +289,9 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
   ierr = scFftTransform(ctx->fftData.fft, X, 1, ctx->fftData.yv);CHKERRQ(ierr);
   ierr = VecGetArray(ctx->fftData.yu, &utilde);CHKERRQ(ierr);
   ierr = VecGetArray(ctx->fftData.yv, &vtilde);CHKERRQ(ierr);
-  for (i = info.xs; i < info.xs + info.xm; ++i) {
+  /* This loop doesn't work in parallel. Need to figure out proper
+   * indexing */
+  for (i = 0; i < Mx; ++i) {
     tmpu.re = utilde[2 * i];
     tmpu.im = utilde[2 * i + 1];
     tmpv.re = vtilde[2 * i];
@@ -307,37 +310,6 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec G,void *ptr)
 
   ierr = VecAXPY(G, 1.0, Xdot);CHKERRQ(ierr);
 
-  /*
-  ierr = DMGetLocalVector(da,&Xloc);CHKERRQ(ierr);
-  ierr = DMGlobalToLocalBegin(da,X,INSERT_VALUES,Xloc);CHKERRQ(ierr);
-  ierr = DMGlobalToLocalEnd(da,X,INSERT_VALUES,Xloc);CHKERRQ(ierr);
-  ierr = DMDAVecGetArrayRead(da,Xloc,&x);CHKERRQ(ierr);
-  ierr = DMDAVecGetArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da,G,&g);CHKERRQ(ierr);
-
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    if (i == 0) {
-      g[i].u += xdot[i].u - (x[i + 1].u) / (2.0 * hx) - x[i].v;
-      g[i].v += xdot[i].v - (x[i + 1].v) / (2.0 * hx) - sx * (-2.0 * x[i].u + x[i + 1].u);
-      continue;
-    }
-    if (i == Mx - 1) {
-      g[i].u += xdot[i].u - (- x[i - 1].u) / (2.0 * hx) - x[i].v;
-      g[i].v += xdot[i].v - (- x[i - 1].v) / (2.0 * hx) - sx * (-2.0 * x[i].u + x[i - 1].u);
-      continue;
-    }
-    u      = x[i].u;
-    v      = x[i].v;
-    uxx    = (-2.0*u + x[i-1].u + x[i+1].u)*sx;
-    g[i].u += xdot[i].u - (x[i + 1].u - x[i - 1].u) / (2.0 * hx) - v;
-    g[i].v += xdot[i].v - (x[i + 1].v - x[i - 1].v) / (2.0 * hx) - uxx;
-  }
-  ierr = PetscLogFlops(4.0*info.xm);CHKERRQ(ierr);
-  ierr = DMDAVecRestoreArrayRead(da,Xloc,&x);CHKERRQ(ierr);
-  ierr = DMDAVecRestoreArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);
-  ierr = DMDAVecRestoreArray(da,G,&g);CHKERRQ(ierr);
-  ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
-  */
   PetscFunctionReturn(0);
 }
 
@@ -360,8 +332,9 @@ PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, P
   if (info.xs == 0) {
     i = 0;
     row.i = i;
+    col[0].i = Mx - 1;
     col[1].i = i + 1;
-    ierr = MatSetValuesStencil(m, 1, &row, 1, &col[1], &v[1], ADD_VALUES);CHKERRQ(ierr);
+    ierr = MatSetValuesStencil(m, 1, &row, 2, &col[0], &v[0], ADD_VALUES);CHKERRQ(ierr);
     ++info.xs;
     --info.xm;
   }
@@ -369,7 +342,8 @@ PetscErrorCode addFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, P
     i = Mx - 1;
     row.i = i;
     col[0].i = i - 1;
-    ierr = MatSetValuesStencil(m, 1, &row, 1, &col[0], &v[0], ADD_VALUES);CHKERRQ(ierr);
+    col[1].i = 0;
+    ierr = MatSetValuesStencil(m, 1, &row, 2, &col[0], &v[0], ADD_VALUES);CHKERRQ(ierr);
     --info.xm;
   }
   for (i = info.xs; i < info.xs + info.xm; ++i) {
@@ -400,10 +374,11 @@ PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, 
   if (info.xs == 0) {
     i = 0;
     row.i = i;
+    col[0].i = Mx - 1;
     for (ii = i + 1; ii < 3; ++ii) {
       col[ii].i = i - 1 + ii;
     }
-    ierr = MatSetValuesStencil(m, 1, &row, 2, &col[1], &v[1], ADD_VALUES);CHKERRQ(ierr);
+    ierr = MatSetValuesStencil(m, 1, &row, 3, &col[0], &v[0], ADD_VALUES);CHKERRQ(ierr);
     ++info.xs;
     --info.xm;
   }
@@ -413,7 +388,8 @@ PetscErrorCode addSecondDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, 
     for (ii = 0; ii < 2; ++ii) {
       col[ii].i = i - 1 + ii;
     }
-    ierr = MatSetValuesStencil(m, 1, &row, 2, col, v, ADD_VALUES);CHKERRQ(ierr);
+    col[2].i = 0;
+    ierr = MatSetValuesStencil(m, 1, &row, 3, col, v, ADD_VALUES);CHKERRQ(ierr);
     --info.xm;
   }
   for (i = info.xs; i < info.xs + info.xm; ++i) {
@@ -446,6 +422,7 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
   ierr = addFirstDerivative(da, Jpre, -1.0, hx, 0, 0);CHKERRQ(ierr);
   ierr = addFirstDerivative(da, Jpre, -1.0, hx, 1, 1);CHKERRQ(ierr);
 
+  /* Auxiliary variable relation */
   v = -1.0;
   row.c = 0;
   col.c = 1;
@@ -455,6 +432,7 @@ PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Ma
     ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
   }
 
+  /* Time derivative terms */
   v = a;
   for (i = info.xs; i < info.xs + info.xm; ++i) {
     col.i = i;
@@ -521,3 +499,44 @@ PetscErrorCode MyTSMonitor(TS ts,PetscInt step,PetscReal ptime,Vec v,void *ctx)
   PetscFunctionReturn(0);
 }
 
+static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr)
+{
+  DM             da;
+  DMDALocalInfo  info;
+  PetscErrorCode ierr;
+  Vec            X, Xdot, GIfunc, GJfunc;
+  PetscRandom    rdm;
+  Mat            J;
+
+  PetscFunctionBegin;
+  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
+
+  ierr = DMCreateMatrix(da,&J);CHKERRQ(ierr);
+
+  ierr = DMGetGlobalVector(da, &X);CHKERRQ(ierr);
+  ierr = PetscRandomCreate(PETSC_COMM_WORLD, &rdm);CHKERRQ(ierr);
+  ierr = PetscRandomSetFromOptions(rdm);CHKERRQ(ierr);
+  ierr = VecSetRandom(X, rdm);CHKERRQ(ierr);
+  ierr = PetscRandomDestroy(&rdm);CHKERRQ(ierr);
+  ierr = VecSet(X, 1.0);CHKERRQ(ierr);
+
+  ierr = DMGetGlobalVector(da, &Xdot);CHKERRQ(ierr);
+  ierr = VecZeroEntries(Xdot);CHKERRQ(ierr);
+  ierr = DMGetGlobalVector(da, &GIfunc);CHKERRQ(ierr);
+  ierr = DMGetGlobalVector(da, &GJfunc);CHKERRQ(ierr);
+
+  ierr = SCIFunction(ts, 0, X, Xdot, GIfunc, ptr);
+  ierr = VecView(GIfunc, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+
+  ierr = SCIJacobian(ts, 0, X, Xdot, 0, J, J, ptr);CHKERRQ(ierr);
+  ierr = MatMult(J, X, GJfunc);CHKERRQ(ierr);
+  ierr = VecView(GJfunc, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+
+  ierr = DMRestoreGlobalVector(da, &GJfunc);CHKERRQ(ierr);
+  ierr = DMRestoreGlobalVector(da, &GIfunc);CHKERRQ(ierr);
+  ierr = DMRestoreGlobalVector(da, &Xdot);CHKERRQ(ierr);
+  ierr = DMRestoreGlobalVector(da, &X);CHKERRQ(ierr);
+  ierr = MatDestroy(&J);CHKERRQ(ierr);
+
+  PetscFunctionReturn(0);
+}
