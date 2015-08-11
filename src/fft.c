@@ -118,3 +118,38 @@ PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z)
   ierr = MatCreateVecsFFTW(fft->matFft, x, y, z);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
+
+#undef __FUNCT__
+#define __FUNCT__ "scFftComputePSD"
+PetscErrorCode scFftComputePSD(ScFft fft, Vec v, PetscInt component, Vec work, Vec psd, PetscBool logScale) {
+  PetscErrorCode ierr;
+  PetscInt       i, imin, imax;
+  struct Cmplx   *w;
+  IS             realParts;
+  VecScatter     realPartsScatter;
+  MPI_Comm       comm;
+
+  PetscFunctionBegin;
+  ierr = VecZeroEntries(psd);CHKERRQ(ierr);
+  ierr = scFftTransform(fft, v, component, work);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(work, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  ierr = VecGetArray(work, (PetscScalar**)&w);CHKERRQ(ierr);
+  for (i = imin; i < imax; ++i) {
+    w[i].re = w[i].re * w[i].re + w[i].im * w[i].im;
+    if (logScale) {
+      w[i].re = PetscLog10Real(w[i].re);
+    }
+  }
+  ierr = VecRestoreArray(work, (PetscScalar**)&w);CHKERRQ(ierr);
+
+  ierr = PetscObjectGetComm((PetscObject)work,&comm);CHKERRQ(ierr);
+  ierr = ISCreateStride(comm,  (imax - imin) / 2, 2 * imin, 2, &realParts);CHKERRQ(ierr);
+  ierr = VecScatterCreate(work, realParts, psd, 0, &realPartsScatter);CHKERRQ(ierr);
+  ierr = VecScatterBegin(realPartsScatter, work, psd, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
+  ierr = VecScatterEnd(realPartsScatter, work, psd, INSERT_VALUES, SCATTER_FORWARD);CHKERRQ(ierr);
+  ierr = VecScatterDestroy(&realPartsScatter);CHKERRQ(ierr);
+  ierr = ISDestroy(&realParts);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}

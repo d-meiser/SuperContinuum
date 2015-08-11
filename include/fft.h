@@ -23,6 +23,11 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <petscmat.h>
 #include <ScExport.h>
 
+struct Cmplx {
+  PetscScalar re;
+  PetscScalar im;
+};
+
 
 struct ScFft_;
 typedef struct ScFft_* ScFft;
@@ -33,5 +38,6 @@ SC_API PetscErrorCode scFftGetDM(ScFft fft, DM *da);
 SC_API PetscErrorCode scFftTransform(ScFft fft, Vec v, PetscInt i, Vec y);
 SC_API PetscErrorCode scFftITransform(ScFft fft, Vec v, PetscInt i, Vec y);
 SC_API PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z);
+SC_API PetscErrorCode scFftComputePSD(ScFft fft, Vec v, PetscInt component, Vec work, Vec psd, PetscBool logScale);
 
 #endif
