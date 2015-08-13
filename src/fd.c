@@ -23,6 +23,9 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #define SQR(a) ((a) * (a))
 #endif
 
+static inline PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax);
+
+
 PetscErrorCode scFdAddFirstDerivative(DM da, Mat m, PetscReal alpha, PetscReal hx, PetscInt rcomp, PetscInt ccomp)
 {
   DMDALocalInfo  info;
