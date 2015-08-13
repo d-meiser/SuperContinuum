@@ -6,6 +6,7 @@ include_directories(
     )
 set(SC_LIB_SRCS
     fft.c
+    fd.c
    )
 add_library(sc_lib ${SC_LIB_SRCS})
 install(TARGETS sc_lib DESTINATION lib)
