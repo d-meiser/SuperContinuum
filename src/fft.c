@@ -153,3 +153,20 @@ PetscErrorCode scFftComputePSD(ScFft fft, Vec v, PetscInt component, Vec work, V
   ierr = ISDestroy(&realParts);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
+
+#undef __FUNCT__
+#define __FUNCT__ "scFftCreateVecPSD"
+PetscErrorCode scFftCreateVecPSD(ScFft fft, Vec *psd)
+{
+  PetscErrorCode ierr;
+  PetscInt       dim;
+  MPI_Comm       comm;
+
+  PetscFunctionBegin;
+  ierr = DMDAGetInfo(fft->da, 0, &dim, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);CHKERRQ(ierr);
+  ierr = PetscObjectGetComm((PetscObject)fft->da, &comm);CHKERRQ(ierr);
+  ierr = VecCreate(comm, psd);CHKERRQ(ierr);
+  ierr = VecSetFromOptions(*psd);CHKERRQ(ierr);
+  ierr = VecSetSizes(*psd, PETSC_DECIDE, dim / 2);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
