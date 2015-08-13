@@ -19,7 +19,7 @@ PETSC_LIBRARY=$PETSC_DIR/$PETSC_ARCH/lib/libpetsc.so
 if [ ! -e $PETSC_LIBRARY ]; then
   echo "$PETSC_LIBRARY not found - reconfiguring and building."
   cd petsc-3.6.1
-  PETSC_ARCH=$PETSC_ARCH PETSC_DIR=$PETSC_DIR ./configure `pwd`\
+  PETSC_ARCH=$PETSC_ARCH PETSC_DIR=$PETSC_DIR ./configure \
     --with-x=$WITH_X \
     --with-debugging=$WITH_DEBUGGING \
     --with-ssl=0 \
