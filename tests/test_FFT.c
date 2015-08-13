@@ -231,6 +231,23 @@ Ensure(output_vector_has_correct_size)
   scFftDestroy(&fft);
 }
 
+Ensure(PSD_vector_has_correct_size)
+{
+  ScFft fft;
+  DM da;
+  PetscInt inputDim = 10;
+  PetscInt inputBlockSize = 3;
+  DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,inputDim,inputBlockSize,1,NULL,&da);
+  scFftCreate(da, &fft);
+  Vec x;
+  scFftCreateVecPSD(fft, &x);
+  PetscInt dim;
+  VecGetSize(x, &dim);
+  assert_that(dim, is_equal_to(inputDim / 2));
+  VecDestroy(&x);
+  scFftDestroy(&fft);
+}
+
 int main(int argc, char **argv)
 {
   PetscInitialize(&argc, &argv, NULL, help);
@@ -242,6 +259,7 @@ int main(int argc, char **argv)
   add_test(suite, second_component_transforms_ok);
   add_test(suite, i_transform_is_inverse_of_transform);
   add_test(suite, PSD_of_delta_function_is_flat);
+  add_test(suite, PSD_vector_has_correct_size);
   int result = run_test_suite(suite, create_text_reporter());
   PetscFinalize();
   return result;
