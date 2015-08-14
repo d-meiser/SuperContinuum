@@ -18,39 +18,69 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <cgreen/cgreen.h>
 #include <fd.h>
+#include <petscdmda.h>
+#include <petscmat.h>
+#include <petscvec.h>
 
 static const char help[] = "Unit tests for FD methods.";
 
-Ensure(first_derivative)
-{
+struct FDFixture {
+  PetscInt dim;
+  PetscInt numComponents;
+  DM da;
   Mat m;
-  DM  dm;
+  Vec x;
+  Vec y;
+  PetscScalar *xarr;
+  PetscScalar *yarr;
+};
+
+static PetscErrorCode setup(struct FDFixture* fixture) {
   PetscErrorCode ierr;
 
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,5,2,1,NULL,&dm);CHKERRV(ierr);
-  ierr = DMCreateMatrix(dm, &m);CHKERRV(ierr);
-  ierr = scFdAddFirstDerivative(dm, m, 1.0, 1.0, 0, 0);CHKERRV(ierr);
-  ierr = MatAssemblyBegin(m, MAT_FINAL_ASSEMBLY);
-  ierr = MatAssemblyEnd(m, MAT_FINAL_ASSEMBLY);
-  ierr = MatView(m, PETSC_VIEWER_STDOUT_WORLD);CHKERRV(ierr);
-  ierr = DMDestroy(&dm);CHKERRV(ierr);
-  ierr = MatDestroy(&m);CHKERRV(ierr);
+  PetscFunctionBegin;
+  fixture->dim = 5;
+  fixture->numComponents = 2;
+  ierr = DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, fixture->dim, fixture->numComponents, 1, NULL, &fixture->da);CHKERRQ(ierr);
+  ierr = DMCreateMatrix(fixture->da, &fixture->m);CHKERRQ(ierr);
+  ierr = DMCreateGlobalVector(fixture->da, &fixture->x);CHKERRQ(ierr);
+  ierr = DMCreateGlobalVector(fixture->da, &fixture->y);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+static PetscErrorCode teardown(struct FDFixture* fixture) {
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  ierr = DMDestroy(&fixture->da);CHKERRQ(ierr);
+  ierr = MatDestroy(&fixture->m);CHKERRQ(ierr);
+  ierr = VecDestroy(&fixture->x);CHKERRQ(ierr);
+  ierr = VecDestroy(&fixture->y);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+Ensure(first_derivative)
+{
+  struct FDFixture fixture;
+  PetscErrorCode ierr;
+  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdAddFirstDerivative(fixture.da, fixture.m, 1.0, 1.0, 0, 0);CHKERRV(ierr);
+  ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
+  ierr = MatAssemblyEnd(fixture.m, MAT_FINAL_ASSEMBLY);
+  ierr = MatView(fixture.m, PETSC_VIEWER_STDOUT_WORLD);CHKERRV(ierr);
+  ierr = teardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(second_derivative)
 {
-  Mat m;
-  DM  dm;
+  struct FDFixture fixture;
   PetscErrorCode ierr;
-
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_PERIODIC,5,2,1,NULL,&dm);CHKERRV(ierr);
-  ierr = DMCreateMatrix(dm, &m);CHKERRV(ierr);
-  ierr = scFdAddSecondDerivative(dm, m, 1.0, 1.0, 1, 0);CHKERRV(ierr);
-  ierr = MatAssemblyBegin(m, MAT_FINAL_ASSEMBLY);
-  ierr = MatAssemblyEnd(m, MAT_FINAL_ASSEMBLY);
-  ierr = MatView(m, PETSC_VIEWER_STDOUT_WORLD);CHKERRV(ierr);
-  ierr = DMDestroy(&dm);CHKERRV(ierr);
-  ierr = MatDestroy(&m);CHKERRV(ierr);
+  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdAddSecondDerivative(fixture.da, fixture.m, 1.0, 1.0, 1, 0);CHKERRV(ierr);
+  ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
+  ierr = MatAssemblyEnd(fixture.m, MAT_FINAL_ASSEMBLY);
+  ierr = MatView(fixture.m, PETSC_VIEWER_STDOUT_WORLD);CHKERRV(ierr);
+  ierr = teardown(&fixture);CHKERRV(ierr);
 }
 
 int main(int argc, char **argv)
