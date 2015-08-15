@@ -1,6 +1,7 @@
 set(TESTS
     FFT
     FD
+    jacobian
    )
 
 include_directories(
