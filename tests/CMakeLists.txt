@@ -1,5 +1,6 @@
 set(TESTS
     FFT
+    FD
    )
 
 include_directories(
