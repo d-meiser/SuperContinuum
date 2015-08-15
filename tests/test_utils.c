@@ -1,6 +1,6 @@
 #include <test_utils.h>
 
-PetscErrorCode scFdSetup(struct FDFixture* fixture) {
+PetscErrorCode scMatSetup(struct MatFixture* fixture) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -14,7 +14,7 @@ PetscErrorCode scFdSetup(struct FDFixture* fixture) {
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode scFdTeardown(struct FDFixture* fixture) {
+PetscErrorCode scMatTeardown(struct MatFixture* fixture) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;

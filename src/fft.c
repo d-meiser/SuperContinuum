@@ -170,3 +170,32 @@ PetscErrorCode scFftCreateVecPSD(ScFft fft, Vec *psd)
   ierr = VecSetSizes(*psd, PETSC_DECIDE, dim / 2);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
+#undef __FUNCT__
+#define __FUNCT__ "scFftCreateFftData"
+PetscErrorCode scFftCreateFftData(DM da, struct FftData *fftData)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  ierr = scFftCreate(da, &fftData->fft);CHKERRQ(ierr);
+  ierr = scFftCreateVecsFFTW(fftData->fft, &fftData->xu, &fftData->yu, &fftData->zu);CHKERRQ(ierr);
+  ierr = scFftCreateVecsFFTW(fftData->fft, &fftData->xv, &fftData->yv, &fftData->zv);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+#undef __FUNCT__
+#define __FUNCT__ "scFftDestroyFftData"
+PetscErrorCode scFftDestroyFftData(struct FftData *fftData)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  ierr = scFftDestroy(&fftData->fft);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xu);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xv);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xv);CHKERRQ(ierr);
+  ierr = VecDestroy(&fftData->xv);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}

@@ -24,7 +24,8 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <petscvec.h>
 #include <ScExport.h>
 
-struct FDFixture {
+/* Fixture for testing matrices */
+struct MatFixture {
   PetscInt dim;
   PetscInt numComponents;
   DM da;
@@ -36,8 +37,7 @@ struct FDFixture {
   PetscScalar *yarr;
 };
 
-
-SC_API PetscErrorCode scFdSetup(struct FDFixture* fixture);
-SC_API PetscErrorCode scFdTeardown(struct FDFixture* fixture);
+SC_API PetscErrorCode scMatSetup(struct MatFixture* fixture);
+SC_API PetscErrorCode scMatTeardown(struct MatFixture* fixture);
 
 #endif

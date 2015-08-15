@@ -26,16 +26,6 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <problem.h>
 #include <fft.h>
 
-struct FftData {
-  ScFft fft;
-  Vec xu;
-  Vec yu;
-  Vec zu;
-  Vec xv;
-  Vec yv;
-  Vec zv;
-};
-
 struct JacobianCtx {
   PetscScalar        alpha;
   struct FftData     *fftData;

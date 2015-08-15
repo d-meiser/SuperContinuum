@@ -114,9 +114,7 @@ int main(int argc,char **argv) {
     ierr = VecSetSizes(user.psd, PETSC_DECIDE, dim / 4);CHKERRQ(ierr);
   }
 
-  ierr = scFftCreate(da, &user.fftData.fft);CHKERRQ(ierr);
-  ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xu, &user.fftData.yu, &user.fftData.zu);CHKERRQ(ierr);
-  ierr = scFftCreateVecsFFTW(user.fftData.fft, &user.fftData.xv, &user.fftData.yv, &user.fftData.zv);CHKERRQ(ierr);
+  ierr = scFftCreateFftData(da, &user.fftData);CHKERRQ(ierr);
   user.jctx.fftData = &user.fftData;
   user.jctx.problem = &user.problem;
 
@@ -162,13 +160,7 @@ int main(int argc,char **argv) {
 
   ierr = VecDestroy(&x);CHKERRQ(ierr);
   ierr = VecDestroy(&r);CHKERRQ(ierr);
-  ierr = scFftDestroy(&user.fftData.fft);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xu);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
-  ierr = VecDestroy(&user.fftData.xv);CHKERRQ(ierr);
+  ierr = scFftDestroyFftData(&user.fftData);CHKERRQ(ierr);
   ierr = TSDestroy(&ts);CHKERRQ(ierr);
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = MatDestroy(&J);CHKERRQ(ierr);
