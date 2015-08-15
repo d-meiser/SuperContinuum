@@ -16,24 +16,11 @@ for more details.
 You should have received a copy of the GNU General Public License along
 with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 */
-#ifndef JACOBIAN_H
-#define JACOBIAN_H
+#ifndef PROBLEM_H
+#define PROBLEM_H
 
-#include <petscdm.h>
-#include <petscts.h>
-#include <petscmat.h>
-#include <ScExport.h>
-#include <problem.h>
-
-struct JacobianCtx {
-  PetscScalar        alpha;
-  struct FftData     *fftData;
-  struct ProblemSpec *problem;
+struct ProblemSpec {
+  PetscScalar gamma;
 };
-
-
-SC_API PetscErrorCode scJacobianBuildConstantPart(DM da, Mat J, PetscBool fourthOrder);
-SC_API PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
-SC_API PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 
 #endif

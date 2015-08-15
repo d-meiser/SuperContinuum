@@ -20,6 +20,15 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <petscdmda.h>
 #include <fd.h>
 
+#ifndef SQR
+#define SQR(a) ((a) * (a))
+#endif
+
+struct Field {
+  PetscScalar u;
+  PetscScalar v;
+};
+
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
 
@@ -99,5 +108,54 @@ PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J)
 
   ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx)
+{
+  PetscFunctionBegin;
+  ctx->alpha = a;
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat Jpre, struct JacobianCtx *ctx)
+{
+  PetscErrorCode ierr;
+  DMDALocalInfo  info;
+  DM             da;
+  struct Field   *x;
+  PetscInt       i, c;
+  PetscScalar    v;
+  MatStencil     col = {0}, row = {0};
+
+  PetscFunctionBegin;
+  ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
+  ierr = MatRetrieveValues(Jpre);CHKERRQ(ierr);
+  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+
+  /* Non-linear term */
+  row.c = 0;
+  col.c = 0;
+  ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
+  for (i=info.xs; i<info.xs+info.xm; i++) {
+    row.i = i;
+    col.i = i;
+    v = -3.0 * ctx->problem->gamma * SQR(x[i].u);
+    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+  ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
+
+  /* Time derivative terms */
+  v = a;
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    col.i = i;
+    for (c = 0; c < 2; ++c) {
+      col.c = c;
+      ierr=MatSetValuesStencil(Jpre,1,&col,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+    }
+  }
+  ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
