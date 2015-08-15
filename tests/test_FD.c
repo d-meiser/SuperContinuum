@@ -18,56 +18,19 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <cgreen/cgreen.h>
 #include <fd.h>
+#include <test_utils.h>
 #include <petscdmda.h>
 #include <petscmat.h>
 #include <petscvec.h>
 
 static const char help[] = "Unit tests for FD methods.";
 
-struct FDFixture {
-  PetscInt dim;
-  PetscInt numComponents;
-  DM da;
-  DMDALocalInfo info;
-  Mat m;
-  Vec x;
-  Vec y;
-  PetscScalar *xarr;
-  PetscScalar *yarr;
-};
-
-static PetscErrorCode setup(struct FDFixture* fixture) {
-  PetscErrorCode ierr;
-
-  PetscFunctionBegin;
-  fixture->dim = 10;
-  fixture->numComponents = 2;
-  ierr = DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, fixture->dim, fixture->numComponents, 2, NULL, &fixture->da);CHKERRQ(ierr);
-  ierr = DMDAGetLocalInfo(fixture->da,&fixture->info);CHKERRQ(ierr);
-  ierr = DMCreateMatrix(fixture->da, &fixture->m);CHKERRQ(ierr);
-  ierr = DMCreateGlobalVector(fixture->da, &fixture->x);CHKERRQ(ierr);
-  ierr = DMCreateGlobalVector(fixture->da, &fixture->y);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-static PetscErrorCode teardown(struct FDFixture* fixture) {
-  PetscErrorCode ierr;
-
-  PetscFunctionBegin;
-  ierr = DMDestroy(&fixture->da);CHKERRQ(ierr);
-  ierr = MatDestroy(&fixture->m);CHKERRQ(ierr);
-  ierr = VecDestroy(&fixture->x);CHKERRQ(ierr);
-  ierr = VecDestroy(&fixture->y);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-
 Ensure(first_derivative_of_constant_is_zero)
 {
   struct FDFixture fixture;
   PetscErrorCode ierr;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddFirstDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -80,7 +43,7 @@ Ensure(first_derivative_of_constant_is_zero)
   ierr = VecStrideNorm(fixture.y, 0, NORM_INFINITY, &nrm);CHKERRV(ierr);
   assert_that(nrm < 1.0e-6, is_true);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(first_derivative_fourth_order_of_constant_is_zero)
@@ -88,7 +51,7 @@ Ensure(first_derivative_fourth_order_of_constant_is_zero)
   struct FDFixture fixture;
   PetscErrorCode ierr;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddFirstDerivativeFourthOrder(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -101,7 +64,7 @@ Ensure(first_derivative_fourth_order_of_constant_is_zero)
   ierr = VecStrideNorm(fixture.y, 0, NORM_INFINITY, &nrm);CHKERRV(ierr);
   assert_that(nrm < 1.0e-6, is_true);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(first_derivative_of_linear_function_is_computed_exactly)
@@ -110,7 +73,7 @@ Ensure(first_derivative_of_linear_function_is_computed_exactly)
   PetscErrorCode ierr;
   PetscInt i;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddFirstDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
 
@@ -139,7 +102,7 @@ Ensure(first_derivative_of_linear_function_is_computed_exactly)
   }
   ierr = VecRestoreArrayRead(fixture.y, (const PetscScalar**)&fixture.yarr);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(first_derivative_fourth_order_of_linear_function_is_computed_exactly)
@@ -148,7 +111,7 @@ Ensure(first_derivative_fourth_order_of_linear_function_is_computed_exactly)
   PetscErrorCode ierr;
   PetscInt i;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddFirstDerivativeFourthOrder(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
 
@@ -169,7 +132,7 @@ Ensure(first_derivative_fourth_order_of_linear_function_is_computed_exactly)
   assert_that(err < 1.0e-6, is_true);
   ierr = VecRestoreArrayRead(fixture.y, (const PetscScalar**)&fixture.yarr);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(second_derivative_of_constant_is_zero)
@@ -177,7 +140,7 @@ Ensure(second_derivative_of_constant_is_zero)
   struct FDFixture fixture;
   PetscErrorCode ierr;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddSecondDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -190,7 +153,7 @@ Ensure(second_derivative_of_constant_is_zero)
   ierr = VecStrideNorm(fixture.y, 0, NORM_INFINITY, &nrm);CHKERRV(ierr);
   assert_that(nrm < 1.0e-6, is_true);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(second_derivative_fourth_order_of_constant_is_zero)
@@ -198,7 +161,7 @@ Ensure(second_derivative_fourth_order_of_constant_is_zero)
   struct FDFixture fixture;
   PetscErrorCode ierr;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddSecondDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -211,7 +174,7 @@ Ensure(second_derivative_fourth_order_of_constant_is_zero)
   ierr = VecStrideNorm(fixture.y, 0, NORM_INFINITY, &nrm);CHKERRV(ierr);
   assert_that(nrm < 1.0e-6, is_true);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(second_derivative_of_linear_function_is_zero)
@@ -220,7 +183,7 @@ Ensure(second_derivative_of_linear_function_is_zero)
   PetscErrorCode ierr;
   PetscInt i;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddSecondDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -240,7 +203,7 @@ Ensure(second_derivative_of_linear_function_is_zero)
   assert_that(err < 1.0e-6, is_true);
   ierr = VecRestoreArrayRead(fixture.y, (const PetscScalar**)&fixture.yarr);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 Ensure(second_derivative_fourth_order_of_linear_function_is_zero)
@@ -249,7 +212,7 @@ Ensure(second_derivative_fourth_order_of_linear_function_is_zero)
   PetscErrorCode ierr;
   PetscInt i;
 
-  ierr = setup(&fixture);CHKERRV(ierr);
+  ierr = scFdSetup(&fixture);CHKERRV(ierr);
 
   ierr = scFdAddSecondDerivative(fixture.da, fixture.m, 3.3, 0.1, 0, 0);CHKERRV(ierr);
   ierr = MatAssemblyBegin(fixture.m, MAT_FINAL_ASSEMBLY);
@@ -269,7 +232,7 @@ Ensure(second_derivative_fourth_order_of_linear_function_is_zero)
   assert_that(err < 1.0e-6, is_true);
   ierr = VecRestoreArrayRead(fixture.y, (const PetscScalar**)&fixture.yarr);CHKERRV(ierr);
 
-  ierr = teardown(&fixture);CHKERRV(ierr);
+  ierr = scFdTeardown(&fixture);CHKERRV(ierr);
 }
 
 
