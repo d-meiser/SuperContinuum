@@ -19,15 +19,12 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <jacobian.h>
 #include <petscdmda.h>
 #include <fd.h>
+#include <basic_types.h>
 
 #ifndef SQR
 #define SQR(a) ((a) * (a))
 #endif
 
-struct Field {
-  PetscScalar u;
-  PetscScalar v;
-};
 
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
@@ -157,5 +154,67 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
   }
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y)
+{
+  PetscErrorCode     ierr;
+  struct JacobianCtx *ctx;
+
+  PetscFunctionBegin;
+  ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
+  ierr = scJacobianApply(ctx, x, y);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
+{
+  PetscErrorCode        ierr;
+  PetscInt              i,imin,imax,Mx;
+  PetscReal             k;
+  struct Cmplx          tmpu, tmpv;
+  PetscScalar           *utilde, *vtilde;
+
+  PetscFunctionBegin;
+  ierr = VecZeroEntries(y);CHKERRQ(ierr);
+  
+  /*
+  Equations:
+
+  gu = u_t - c u_x - v
+  gv = v_t - c v_x - u_xx
+
+  The time derivative terms are added in real space, all other terms are
+  dealt with in the frequency domain.
+  */
+
+  ierr = scFftTransform(ctx->fftData->fft, x, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData->fft, x, 1, ctx->fftData->yv);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(ctx->fftData->yu, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  for (i = imin; i < imax; ++i) {
+    tmpu.re = utilde[2 * i];
+    tmpu.im = utilde[2 * i + 1];
+    tmpv.re = vtilde[2 * i];
+    tmpv.im = vtilde[2 * i + 1];
+    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
+    utilde[2 * i]     = k * tmpu.im - tmpv.re;
+    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
+    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
+    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
+  }
+  ierr = VecRestoreArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
+  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
+  ierr = VecScale(y, 1.0 / Mx);CHKERRQ(ierr);
+
+  ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
+
   PetscFunctionReturn(0);
 }

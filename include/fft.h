@@ -22,11 +22,7 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <petscdm.h>
 #include <petscmat.h>
 #include <ScExport.h>
-
-struct Cmplx {
-  PetscScalar re;
-  PetscScalar im;
-};
+#include <basic_types.h>
 
 
 struct ScFft_;

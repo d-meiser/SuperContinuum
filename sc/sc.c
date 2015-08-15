@@ -24,6 +24,7 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 #include <petscdraw.h>
 #include <petscmat.h>
 
+#include <basic_types.h>
 #include <fft.h>
 #include <fd.h>
 #include <jacobian.h>
@@ -32,16 +33,6 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 #define SQR(a) ((a) * (a))
 #endif
 
-
-struct FftData {
-  ScFft fft;
-  Vec xu;
-  Vec yu;
-  Vec zu;
-  Vec xv;
-  Vec yv;
-  Vec zv;
-};
 
 struct AppCtx {
   PetscScalar           l;
@@ -56,20 +47,12 @@ struct AppCtx {
   Vec                   psd;
 };
 
-struct Field {
-  PetscScalar u;
-  PetscScalar v;
-};
-
-
 static PetscErrorCode FormInitialSolution(DM,Vec);
 static PetscErrorCode MyTSMonitor(TS,PetscInt,PetscReal,Vec,void*);
 static PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X,Vec Xdot,Vec G,void *ptr);
 static PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx);
 PETSC_STATIC_INLINE PetscScalar initialState(PetscReal x);
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
-PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
-static PetscErrorCode matrixFreeJacobianImpl(struct JacobianCtx *ctx, Vec x, Vec y);
 static PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax);
 
 int main(int argc,char **argv) {
@@ -150,8 +133,7 @@ int main(int argc,char **argv) {
   ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &M, &N);CHKERRQ(ierr);
   ierr = MatCreateShell(PETSC_COMM_WORLD, m, n, M, N, &user.jctx, &J);CHKERRQ(ierr);
-  ierr = MatShellSetOperation(J, MATOP_MULT, (void (*)(void))matrixFreeJacobian);CHKERRQ(ierr);
-
+  ierr = MatShellSetOperation(J, MATOP_MULT, (void (*)(void))scJacobianMatMult);CHKERRQ(ierr);
 
   if (!useColoring) {
     ierr = TSSetIJacobian(ts,J,Jprec,SCIJacobian,&user.jctx);CHKERRQ(ierr);
@@ -218,7 +200,7 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
   /* linear term */
   jctx.fftData = &ctx->fftData;
   jctx.alpha = 0.0;
-  ierr = matrixFreeJacobianImpl(&jctx, X, F);
+  ierr = scJacobianApply(&jctx, X, F);
 
   /* Nonlinear term */
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
@@ -236,69 +218,6 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
 
   PetscFunctionReturn(0);
 }
-
-PetscErrorCode matrixFreeJacobian(Mat J, Vec x, Vec y)
-{
-  PetscErrorCode        ierr;
-  struct JacobianCtx *ctx;
-
-  PetscFunctionBegin;
-  ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
-  ierr = matrixFreeJacobianImpl(ctx, x, y);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-PetscErrorCode matrixFreeJacobianImpl(struct JacobianCtx *ctx, Vec x, Vec y)
-{
-  PetscErrorCode        ierr;
-  PetscInt              i,imin,imax,Mx;
-  PetscReal             k;
-  struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde;
-
-  PetscFunctionBegin;
-  ierr = VecZeroEntries(y);CHKERRQ(ierr);
-  
-  /*
-  Equations:
-
-  gu = u_t - c u_x - v
-  gv = v_t - c v_x - u_xx
-
-  The time derivative terms are added in real space, all other terms are
-  dealt with in the frequency domain.
-  */
-
-  ierr = scFftTransform(ctx->fftData->fft, x, 0, ctx->fftData->yu);CHKERRQ(ierr);
-  ierr = scFftTransform(ctx->fftData->fft, x, 1, ctx->fftData->yv);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
-  ierr = VecGetArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecGetOwnershipRange(ctx->fftData->yu, &imin, &imax);CHKERRQ(ierr);
-  imin /= 2;
-  imax /= 2;
-  for (i = imin; i < imax; ++i) {
-    tmpu.re = utilde[2 * i];
-    tmpu.im = utilde[2 * i + 1];
-    tmpv.re = vtilde[2 * i];
-    tmpv.im = vtilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
-    utilde[2 * i]     = k * tmpu.im - tmpv.re;
-    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
-    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
-    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
-  }
-  ierr = VecRestoreArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
-  ierr = VecRestoreArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData->fft, y, 0, ctx->fftData->yu);CHKERRQ(ierr);
-  ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
-  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
-  ierr = VecScale(y, 1.0 / Mx);CHKERRQ(ierr);
-
-  ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
-
-  PetscFunctionReturn(0);
-}
-
 
 PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
