@@ -25,8 +25,11 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 #include <petscmat.h>
 
 #include <fft.h>
+#include <fd.h>
 
+#ifndef SQR
 #define SQR(a) ((a) * (a))
+#endif
 
 
 struct FftData {
