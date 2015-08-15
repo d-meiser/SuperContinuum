@@ -7,6 +7,7 @@ include_directories(
 set(SC_LIB_SRCS
     fft.c
     fd.c
+    jacobian.c
    )
 add_library(sc_lib ${SC_LIB_SRCS})
 set_target_properties(sc_lib PROPERTIES

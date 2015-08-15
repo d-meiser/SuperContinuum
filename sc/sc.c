@@ -26,6 +26,7 @@ static char help[] = "Nonlinear optical pulse propagation.\n";
 
 #include <fft.h>
 #include <fd.h>
+#include <jacobian.h>
 
 #ifndef SQR
 #define SQR(a) ((a) * (a))
@@ -72,8 +73,6 @@ static PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X,Vec Xdot,Vec G,void *p
 static PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx);
 PETSC_STATIC_INLINE PetscScalar initialState(PetscReal x);
 static PetscErrorCode checkIFunctionAndJacobianConsistent(TS ts, void *ptr);
-static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx);
-static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J, void *ctx);
 PetscErrorCode matrixFreeJacobian(Mat, Vec, Vec);
 static PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y);
 static PetscInt clamp(PetscInt i, PetscInt imin, PetscInt imax);
@@ -149,11 +148,7 @@ int main(int argc,char **argv) {
 
   ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
   ierr = DMCreateMatrix(da,&Jprec);CHKERRQ(ierr);
-  if (user.useFourthOrder) {
-  ierr = buildConstantPartOfJacobianFourthOrder(da, Jprec, &user);CHKERRQ(ierr);
-  } else {
-    ierr = buildConstantPartOfJacobian(da, Jprec, &user);CHKERRQ(ierr);
-  }
+  ierr = scJacobianBuildConstantPart(da, Jprec, user.useFourthOrder);CHKERRQ(ierr);
   ierr = MatSetOption(Jprec, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
   ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
@@ -308,71 +303,6 @@ PetscErrorCode matrixFreeJacobianImpl(struct JacobianMatMul *ctx, Vec x, Vec y)
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J, void *ctx)
-{
-  PetscErrorCode ierr;
-  PetscInt       i, Mx;
-  MatStencil     col = {0}, row = {0};
-  PetscScalar    v, hx;
-  DMDALocalInfo  info;
-
-  PetscFunctionBegin;
-  ierr = MatZeroEntries(J);CHKERRQ(ierr);
-  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
-
-  hx = 1.0/(PetscReal)(Mx-1);
-  ierr = scFdAddSecondDerivative(da, J, -1.0, hx, 1, 0);CHKERRQ(ierr);
-  ierr = scFdAddFirstDerivative(da, J, -1.0, hx, 0, 0);CHKERRQ(ierr);
-  ierr = scFdAddFirstDerivative(da, J, -1.0, hx, 1, 1);CHKERRQ(ierr);
-
-  /* Auxiliary variable relation */
-  v = -1.0;
-  row.c = 0;
-  col.c = 1;
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    row.i = i;
-    col.i = i;
-    ierr=MatSetValuesStencil(J,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-  }
-
-  ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
-
-PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J, void *ctx)
-{
-  PetscErrorCode ierr;
-  PetscInt       i, Mx;
-  MatStencil     col = {0}, row = {0};
-  PetscScalar    v, hx;
-  DMDALocalInfo  info;
-
-  PetscFunctionBegin;
-  ierr = MatZeroEntries(J);CHKERRQ(ierr);
-  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-  ierr = DMDAGetInfo(da,PETSC_IGNORE,&Mx,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE,PETSC_IGNORE);
-
-  hx = 1.0/(PetscReal)(Mx-1);
-  ierr = scFdAddSecondDerivativeFourthOrder(da, J, -1.0, hx, 1, 0);CHKERRQ(ierr);
-  ierr = scFdAddFirstDerivativeFourthOrder(da, J, -1.0, hx, 0, 0);CHKERRQ(ierr);
-  ierr = scFdAddFirstDerivativeFourthOrder(da, J, -1.0, hx, 1, 1);CHKERRQ(ierr);
-
-  /* Auxiliary variable relation */
-  v = -1.0;
-  row.c = 0;
-  col.c = 1;
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    row.i = i;
-    col.i = i;
-    ierr=MatSetValuesStencil(J,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-  }
-
-  ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-  PetscFunctionReturn(0);
-}
 
 PetscErrorCode SCIJacobian(TS ts,PetscReal t,Vec X,Vec Xdot,PetscReal a,Mat J,Mat Jpre,void *ctx)
 {
