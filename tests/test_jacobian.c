@@ -117,6 +117,42 @@ Ensure(prec_consistent_gaussian_fourth_order)
   ierr = checkJacobianPreConsistency(waveAtRest, gaussian, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
 }
 
+Ensure(prec_consistent_constant_right_moving)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_constant_right_moving_fourth_order)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_sine_wave_right_moving)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, sine_wave, PETSC_FALSE, 1.0e0, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_sine_wave_right_moving_fourth_order)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, sine_wave, PETSC_TRUE, 1.0e-3, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_gaussian_right_moving)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, gaussian, PETSC_FALSE, 2.0e0, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_gaussian_right_moving_fourth_order)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(rightMovingWave, gaussian, PETSC_TRUE, 1.0e0, PETSC_FALSE);CHKERRV(ierr);
+}
+
 int main(int argc, char **argv)
 {
   PetscInitialize(&argc, &argv, NULL, help);
@@ -129,6 +165,12 @@ int main(int argc, char **argv)
   add_test(suite, prec_consistent_sine_wave_fourth_order);
   add_test(suite, prec_consistent_gaussian);
   add_test(suite, prec_consistent_gaussian_fourth_order);
+  add_test(suite, prec_consistent_constant_right_moving);
+  add_test(suite, prec_consistent_constant_right_moving_fourth_order);
+  add_test(suite, prec_consistent_sine_wave_right_moving);
+  add_test(suite, prec_consistent_sine_wave_right_moving_fourth_order);
+  add_test(suite, prec_consistent_gaussian_right_moving);
+  add_test(suite, prec_consistent_gaussian_right_moving_fourth_order);
   int result = run_test_suite(suite, create_text_reporter());
   PetscFinalize();
   return result;
