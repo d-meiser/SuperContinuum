@@ -112,6 +112,7 @@ PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a,
 {
   PetscFunctionBegin;
   ctx->alpha = a;
+  /* have to compute the chi3 part here, too */
   PetscFunctionReturn(0);
 }
 
@@ -174,7 +175,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   PetscInt              i,imin,imax,Mx;
   PetscReal             k;
   struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde;
+  PetscScalar           *utilde, *vtilde, *u;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
@@ -187,7 +188,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   /*
   Equations:
 
-  gu = u_t - c u_x - v
+  gu = u_t - c u_x - v - gamma * u^3
   gv = v_t - c v_x - u_xx
 
   The time derivative terms are added in real space, all other terms are
@@ -221,6 +222,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
   ierr = VecScale(y, 1.0 / (PetscScalar)Mx);CHKERRQ(ierr);
 
+  /* time dependent term */
   ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
 
   PetscFunctionReturn(0);

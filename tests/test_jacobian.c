@@ -153,6 +153,19 @@ Ensure(prec_consistent_gaussian_right_moving_fourth_order)
   ierr = checkJacobianPreConsistency(rightMovingWave, gaussian, 0.0, 0.0, PETSC_TRUE, 1.0e0, PETSC_FALSE);CHKERRV(ierr);
 }
 
+Ensure(prec_consistent_sine_wave_non_zero_alpha)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 1.0, 0.0, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_sine_wave_non_zero_gamma)
+{
+  PetscErrorCode ierr;
+  ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 0.0, 1.0, PETSC_FALSE, 1.0e-2, PETSC_TRUE);CHKERRV(ierr);
+}
+
+
 int main(int argc, char **argv)
 {
   PetscInitialize(&argc, &argv, NULL, help);
@@ -171,6 +184,8 @@ int main(int argc, char **argv)
   add_test(suite, prec_consistent_sine_wave_right_moving_fourth_order);
   add_test(suite, prec_consistent_gaussian_right_moving);
   add_test(suite, prec_consistent_gaussian_right_moving_fourth_order);
+  add_test(suite, prec_consistent_sine_wave_non_zero_alpha);
+  add_test(suite, prec_consistent_sine_wave_non_zero_gamma);
   int result = run_test_suite(suite, create_text_reporter());
   PetscFinalize();
   return result;
@@ -186,8 +201,8 @@ static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm 
   ierr = filler(X, f);CHKERRQ(ierr);
   ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
-  ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
-  ierr = scJacobianBuild(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.J, &fixture.jCtx);CHKERRQ(ierr);
+  ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, alpha, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
+  ierr = scJacobianBuild(fixture.ts, 0.0, X, fixture.Xdot, alpha, fixture.J, &fixture.jCtx);CHKERRQ(ierr);
 
   ierr = MatMult(fixture.Jpre, X, fixture.matFixture.y);CHKERRQ(ierr);
   ierr = MatMult(fixture.J, X, fixture.yJ);CHKERRQ(ierr);
