@@ -40,6 +40,7 @@ struct JacobianFixture {
 static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture);
 static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
 static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar));
+static PetscErrorCode waveAtRest(Vec X, PetscScalar (*f)(PetscScalar));
 static PetscScalar constant_func(PetscScalar x);
 static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscScalar tol, PetscBool view);
 
@@ -63,15 +64,25 @@ Ensure(can_build_jacobian_fourth_order)
   ierr = scMatTeardown(&fixture);CHKERRV(ierr);
 }
 
-
 static PetscScalar constant_func(PetscScalar x) {
   return 2.3;
+}
+
+static PetscScalar sine_wave(PetscScalar x) {
+  PetscScalar k = 2.0 * M_PI * 1.0;
+  return sin(k * x);
+}
+
+static PetscScalar gaussian(PetscScalar x) {
+  PetscScalar sigma = 0.1;
+  return exp(-(x * x) / (sigma * sigma));
 }
 
 Ensure(jacobian_and_preconditioner_are_consistent)
 {
   PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(constant_func, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(sine_wave, 1.0e-2, PETSC_TRUE);CHKERRV(ierr);
 }
 
 int main(int argc, char **argv)
@@ -93,26 +104,49 @@ static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScal
   struct JacobianFixture fixture;
   ierr = jacobianSetup(&fixture);CHKERRQ(ierr);
   Vec X = fixture.matFixture.x;
-  ierr = rightMovingWave(X, state);CHKERRQ(ierr);
-  if (view) {
-    ierr = VecView(X, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  }
+  ierr = waveAtRest(X, state);CHKERRQ(ierr);
   ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, PETSC_FALSE);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
   ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
   ierr = scJacobianBuild(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.J, &fixture.jCtx);CHKERRQ(ierr);
+
   ierr = MatMult(fixture.Jpre, X, fixture.matFixture.y);CHKERRQ(ierr);
-  if (view) {
-    ierr = VecView(fixture.matFixture.y, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  }
   ierr = MatMult(fixture.J, X, fixture.yJ);CHKERRQ(ierr);
+
   if (view) {
-    ierr = VecView(fixture.yJ, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+    DM da;
+    ierr = VecGetDM(X, &da);CHKERRQ(ierr);
+    PetscInt Mx;
+    DMDAGetInfo(da, 0, &Mx, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    const PetscScalar *xarr, *yprearr, *yjarr;
+    ierr = VecGetArrayRead(X, &xarr);CHKERRQ(ierr);
+    ierr = VecGetArrayRead(fixture.matFixture.y, &yprearr);CHKERRQ(ierr);
+    ierr = VecGetArrayRead(fixture.yJ, &yjarr);CHKERRQ(ierr);
+    PetscInt i = 0;
+    PetscScalar k = 2.0 * M_PI / 1.0;
+    PetscScalar hx = 1.0 / Mx;
+    for (i = 0; i < 30; ++i) {
+      if (i % 2 == 0) {
+        printf("%lf %lf %lf %lf\n", xarr[i], yprearr[i], yjarr[i], -k * cos(k * (i / 2 - 0.5 * Mx) * hx));
+      }
+    }
+    ierr = VecRestoreArrayRead(fixture.yJ, &yjarr);CHKERRQ(ierr);
+    ierr = VecRestoreArrayRead(fixture.matFixture.y, &yprearr);CHKERRQ(ierr);
+    ierr = VecRestoreArrayRead(X, &xarr);CHKERRQ(ierr);
   }
+
   ierr = VecAXPY(fixture.yJ, -1.0, fixture.matFixture.y);CHKERRQ(ierr);
   PetscScalar err;
-  ierr = VecNorm(fixture.yJ, NORM_2, &err);CHKERRQ(ierr);
-  assert_that(err < tol, is_true);
+  PetscScalar nrm;
+  ierr = VecStrideNorm(fixture.yJ, 0, NORM_2, &err);CHKERRQ(ierr);
+  ierr = VecStrideNorm(fixture.matFixture.y, 0, NORM_2, &nrm);CHKERRQ(ierr);
+  nrm += 1.0e-6;
+  assert_that((err / nrm < tol), is_true);
+  ierr = VecStrideNorm(fixture.yJ, 1, NORM_2, &err);CHKERRQ(ierr);
+  ierr = VecStrideNorm(fixture.matFixture.y, 1, NORM_2, &nrm);CHKERRQ(ierr);
+  nrm += 1.0e-6;
+  assert_that(err / nrm < tol, is_true);
+
   ierr = jacobianTeardown(&fixture);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
@@ -174,7 +208,7 @@ static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar))
   PetscFunctionBegin;
   ierr = VecGetDM(X, &da);CHKERRQ(ierr);
   DMDAGetInfo(da, 0, &Mx, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-  hx = 1.0/(PetscReal)(Mx-1);
+  hx = 1.0/(PetscReal)Mx;
 
   ierr = DMDAVecGetArrayDOF(da,X,&x);CHKERRQ(ierr);
 
@@ -184,6 +218,33 @@ static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar))
     z = (i - 0.5 * Mx) * hx;
     x[i][0] = f(z);
     x[i][1] = -(f(z + 0.5 * hx) - f(z - 0.5 * hx)) / hx;
+  }
+
+  ierr = DMDAVecRestoreArrayDOF(da,X,&x);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+static PetscErrorCode waveAtRest(Vec X, PetscScalar (*f)(PetscScalar))
+{
+  PetscErrorCode ierr;
+  PetscInt       i, xs, xm, Mx;
+  PetscScalar    **x;
+  PetscReal      hx, z;
+  DM             da;
+
+  PetscFunctionBegin;
+  ierr = VecGetDM(X, &da);CHKERRQ(ierr);
+  DMDAGetInfo(da, 0, &Mx, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  hx = 1.0 / (PetscReal)Mx;
+
+  ierr = DMDAVecGetArrayDOF(da,X,&x);CHKERRQ(ierr);
+
+  ierr = DMDAGetCorners(da,&xs,NULL,NULL,&xm,NULL,NULL);CHKERRQ(ierr);
+
+  for (i=xs; i<xs+xm; i++) {
+    z = (i - 0.5 * Mx) * hx;
+    x[i][0] = f(z);
+    x[i][1] = 0;
   }
 
   ierr = DMDAVecRestoreArrayDOF(da,X,&x);CHKERRQ(ierr);

@@ -178,6 +178,11 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
+  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
+  Mx /= 2;
+  /* sampling frequency */
+  PetscScalar hx = 1.0 / (Mx - 1);
+  PetscScalar kNyquist = M_PI / hx;
   
   /*
   Equations:
@@ -201,7 +206,10 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
     tmpu.im = utilde[2 * i + 1];
     tmpv.re = vtilde[2 * i];
     tmpv.im = vtilde[2 * i + 1];
-    k = 2.0 * M_PI * (PetscScalar)i / 1.0;
+    k = 2.0 * M_PI / hx * (PetscScalar)i / (PetscScalar)Mx;
+    if (k > kNyquist) {
+      k -= 2.0 * kNyquist;
+    }
     utilde[2 * i]     = k * tmpu.im - tmpv.re;
     utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
     vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
@@ -211,8 +219,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   ierr = VecRestoreArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
   ierr = scFftITransform(ctx->fftData->fft, y, 0, ctx->fftData->yu);CHKERRQ(ierr);
   ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
-  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
-  ierr = VecScale(y, 1.0 / Mx);CHKERRQ(ierr);
+  ierr = VecScale(y, 1.0 / (PetscScalar)Mx);CHKERRQ(ierr);
 
   ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
 

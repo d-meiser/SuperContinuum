@@ -4,7 +4,7 @@ PetscErrorCode scMatSetup(struct MatFixture* fixture) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
-  fixture->dim = 10;
+  fixture->dim = 50;
   fixture->numComponents = 2;
   ierr = DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, fixture->dim, fixture->numComponents, 2, NULL, &fixture->da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(fixture->da,&fixture->info);CHKERRQ(ierr);
