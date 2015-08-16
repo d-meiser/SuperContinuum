@@ -37,12 +37,14 @@ struct JacobianFixture {
   Vec                yJ;
 };
 
+typedef PetscScalar (*WaveForm)(PetscScalar);
+
 static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture);
 static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
 static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar));
 static PetscErrorCode waveAtRest(Vec X, PetscScalar (*f)(PetscScalar));
 static PetscScalar constant_func(PetscScalar x);
-static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscBool fourthOrder, PetscScalar tol, PetscBool view);
+static PetscErrorCode checkJacobianPreConsistency(WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view);
 
 Ensure(can_build_jacobian)
 {
@@ -131,14 +133,14 @@ int main(int argc, char **argv)
   return result;
 }
 
-static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
+static PetscErrorCode checkJacobianPreConsistency(WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
   struct JacobianFixture fixture;
   ierr = jacobianSetup(&fixture);CHKERRQ(ierr);
   Vec X = fixture.matFixture.x;
-  ierr = waveAtRest(X, state);CHKERRQ(ierr);
+  ierr = waveAtRest(X, f);CHKERRQ(ierr);
   ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
   ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
