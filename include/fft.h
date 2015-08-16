@@ -22,15 +22,22 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <petscdm.h>
 #include <petscmat.h>
 #include <ScExport.h>
-
-struct Cmplx {
-  PetscScalar re;
-  PetscScalar im;
-};
+#include <basic_types.h>
 
 
 struct ScFft_;
 typedef struct ScFft_* ScFft;
+
+struct FftData {
+  ScFft fft;
+  Vec xu;
+  Vec yu;
+  Vec zu;
+  Vec xv;
+  Vec yv;
+  Vec zv;
+};
+
 
 SC_API PetscErrorCode scFftCreate(DM da, ScFft *fft);
 SC_API PetscErrorCode scFftDestroy(ScFft *fft);
@@ -40,5 +47,7 @@ SC_API PetscErrorCode scFftITransform(ScFft fft, Vec v, PetscInt i, Vec y);
 SC_API PetscErrorCode scFftCreateVecsFFTW(ScFft fft, Vec *x, Vec *y, Vec *z);
 SC_API PetscErrorCode scFftCreateVecPSD(ScFft fft, Vec *psd);
 SC_API PetscErrorCode scFftComputePSD(ScFft fft, Vec v, PetscInt component, Vec work, Vec psd, PetscBool logScale);
+SC_API PetscErrorCode scFftCreateFftData(DM da, struct FftData *fftData);
+SC_API PetscErrorCode scFftDestroyFftData(struct FftData *fftData);
 
 #endif

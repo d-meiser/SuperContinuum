@@ -19,6 +19,12 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #include <jacobian.h>
 #include <petscdmda.h>
 #include <fd.h>
+#include <basic_types.h>
+
+#ifndef SQR
+#define SQR(a) ((a) * (a))
+#endif
+
 
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
@@ -99,5 +105,125 @@ PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J)
 
   ierr=MatAssemblyBegin(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(J,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx)
+{
+  PetscFunctionBegin;
+  ctx->alpha = a;
+  /* have to compute the chi3 part here, too */
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat Jpre, struct JacobianCtx *ctx)
+{
+  PetscErrorCode ierr;
+  DMDALocalInfo  info;
+  DM             da;
+  struct Field   *x;
+  PetscInt       i, c;
+  PetscScalar    v;
+  MatStencil     col = {0}, row = {0};
+
+  PetscFunctionBegin;
+  ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
+  ierr = MatRetrieveValues(Jpre);CHKERRQ(ierr);
+  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
+  ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
+
+  /* Non-linear term */
+  row.c = 0;
+  col.c = 0;
+  ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
+  for (i=info.xs; i<info.xs+info.xm; i++) {
+    row.i = i;
+    col.i = i;
+    v = -3.0 * ctx->problem->gamma * SQR(x[i].u);
+    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+  ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
+
+  /* Time derivative terms */
+  v = a;
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    col.i = i;
+    for (c = 0; c < 2; ++c) {
+      col.c = c;
+      ierr=MatSetValuesStencil(Jpre,1,&col,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+    }
+  }
+  ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y)
+{
+  PetscErrorCode     ierr;
+  struct JacobianCtx *ctx;
+
+  PetscFunctionBegin;
+  ierr = MatShellGetContext(J, &ctx);CHKERRQ(ierr);
+  ierr = scJacobianApply(ctx, x, y);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
+{
+  PetscErrorCode        ierr;
+  PetscInt              i,imin,imax,Mx;
+  PetscReal             k;
+  struct Cmplx          tmpu, tmpv;
+  PetscScalar           *utilde, *vtilde, *u;
+
+  PetscFunctionBegin;
+  ierr = VecZeroEntries(y);CHKERRQ(ierr);
+  ierr = VecGetSize(y, &Mx);CHKERRQ(ierr);
+  Mx /= 2;
+  /* sampling frequency */
+  PetscScalar hx = 1.0 / (Mx - 1);
+  PetscScalar kNyquist = M_PI / hx;
+  
+  /*
+  Equations:
+
+  gu = u_t - c u_x - v - gamma * u^3
+  gv = v_t - c v_x - u_xx
+
+  The time derivative terms are added in real space, all other terms are
+  dealt with in the frequency domain.
+  */
+
+  ierr = scFftTransform(ctx->fftData->fft, x, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftTransform(ctx->fftData->fft, x, 1, ctx->fftData->yv);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = VecGetArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(ctx->fftData->yu, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  for (i = imin; i < imax; ++i) {
+    tmpu.re = utilde[2 * i];
+    tmpu.im = utilde[2 * i + 1];
+    tmpv.re = vtilde[2 * i];
+    tmpv.im = vtilde[2 * i + 1];
+    k = 2.0 * M_PI / hx * (PetscScalar)i / (PetscScalar)Mx;
+    if (k > kNyquist) {
+      k -= 2.0 * kNyquist;
+    }
+    utilde[2 * i]     = k * tmpu.im - tmpv.re;
+    utilde[2 * i + 1] = -k * tmpu.re - tmpv.im;
+    vtilde[2* i]      = k * tmpv.im + SQR(k) * tmpu.re;
+    vtilde[2 * i + 1] = -k * tmpv.re + SQR(k) * tmpu.im;
+  }
+  ierr = VecRestoreArray(ctx->fftData->yv, &vtilde);CHKERRQ(ierr);
+  ierr = VecRestoreArray(ctx->fftData->yu, &utilde);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 0, ctx->fftData->yu);CHKERRQ(ierr);
+  ierr = scFftITransform(ctx->fftData->fft, y, 1, ctx->fftData->yv);CHKERRQ(ierr);
+  ierr = VecScale(y, 1.0 / (PetscScalar)Mx);CHKERRQ(ierr);
+
+  /* time dependent term */
+  ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
+
   PetscFunctionReturn(0);
 }
