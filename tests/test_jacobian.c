@@ -38,13 +38,14 @@ struct JacobianFixture {
 };
 
 typedef PetscScalar (*WaveForm)(PetscScalar);
+typedef PetscErrorCode (*FillerMethod)(Vec, WaveForm);
 
 static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture);
 static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
-static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar));
-static PetscErrorCode waveAtRest(Vec X, PetscScalar (*f)(PetscScalar));
+static PetscErrorCode rightMovingWave(Vec X, WaveForm f);
+static PetscErrorCode waveAtRest(Vec X, WaveForm f);
 static PetscScalar constant_func(PetscScalar x);
-static PetscErrorCode checkJacobianPreConsistency(WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view);
+static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view);
 
 Ensure(can_build_jacobian)
 {
@@ -83,37 +84,37 @@ static PetscScalar gaussian(PetscScalar x) {
 Ensure(prec_consistent_constant)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
 }
 
 Ensure(prec_consistent_constant_fourth_order)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
 }
 
 Ensure(prec_consistent_sine_wave)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(sine_wave, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
 }
 
 Ensure(prec_consistent_sine_wave_fourth_order)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(sine_wave, PETSC_TRUE, 1.0e-5, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, PETSC_TRUE, 1.0e-5, PETSC_FALSE);CHKERRV(ierr);
 }
 
 Ensure(prec_consistent_gaussian)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(gaussian, PETSC_FALSE, 1.0e-1, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, gaussian, PETSC_FALSE, 1.0e-1, PETSC_FALSE);CHKERRV(ierr);
 }
 
 Ensure(prec_consistent_gaussian_fourth_order)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(gaussian, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(waveAtRest, gaussian, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
 }
 
 int main(int argc, char **argv)
@@ -133,14 +134,14 @@ int main(int argc, char **argv)
   return result;
 }
 
-static PetscErrorCode checkJacobianPreConsistency(WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
+static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm f, PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
   struct JacobianFixture fixture;
   ierr = jacobianSetup(&fixture);CHKERRQ(ierr);
   Vec X = fixture.matFixture.x;
-  ierr = waveAtRest(X, f);CHKERRQ(ierr);
+  ierr = filler(X, f);CHKERRQ(ierr);
   ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
   ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
