@@ -78,14 +78,39 @@ static PetscScalar gaussian(PetscScalar x) {
   return exp(-(x * x) / (sigma * sigma));
 }
 
-Ensure(jacobian_and_preconditioner_are_consistent)
+Ensure(prec_consistent_constant)
 {
   PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_constant_fourth_order)
+{
+  PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_sine_wave)
+{
+  PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(sine_wave, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_sine_wave_fourth_order)
+{
+  PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(sine_wave, PETSC_TRUE, 1.0e-5, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_gaussian)
+{
+  PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(gaussian, PETSC_FALSE, 1.0e-1, PETSC_FALSE);CHKERRV(ierr);
+}
+
+Ensure(prec_consistent_gaussian_fourth_order)
+{
+  PetscErrorCode ierr;
   ierr = checkJacobianPreConsistency(gaussian, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
 }
 
@@ -95,7 +120,12 @@ int main(int argc, char **argv)
   TestSuite *suite = create_test_suite();
   add_test(suite, can_build_jacobian);
   add_test(suite, can_build_jacobian_fourth_order);
-  add_test(suite, jacobian_and_preconditioner_are_consistent);
+  add_test(suite, prec_consistent_constant);
+  add_test(suite, prec_consistent_constant_fourth_order);
+  add_test(suite, prec_consistent_sine_wave);
+  add_test(suite, prec_consistent_sine_wave_fourth_order);
+  add_test(suite, prec_consistent_gaussian);
+  add_test(suite, prec_consistent_gaussian_fourth_order);
   int result = run_test_suite(suite, create_text_reporter());
   PetscFinalize();
   return result;
