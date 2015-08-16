@@ -261,6 +261,7 @@ int main(int argc, char **argv)
   add_test(suite, PSD_of_delta_function_is_flat);
   add_test(suite, PSD_vector_has_correct_size);
   int result = run_test_suite(suite, create_text_reporter());
+  destroy_test_suite(suite);
   PetscFinalize();
   return result;
 }

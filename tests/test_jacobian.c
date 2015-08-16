@@ -189,6 +189,7 @@ int main(int argc, char **argv)
   add_test(suite, prec_consistent_sine_wave_non_zero_gamma);
   */
   int result = run_test_suite(suite, create_text_reporter());
+  destroy_test_suite(suite);
   PetscFinalize();
   return result;
 }

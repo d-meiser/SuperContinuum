@@ -249,6 +249,7 @@ int main(int argc, char **argv)
   add_test(suite, second_derivative_of_linear_function_is_zero);
   add_test(suite, second_derivative_fourth_order_of_linear_function_is_zero);
   int result = run_test_suite(suite, create_text_reporter());
+  destroy_test_suite(suite);
   PetscFinalize();
   return result;
 }
