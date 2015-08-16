@@ -42,7 +42,7 @@ static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
 static PetscErrorCode rightMovingWave(Vec X, PetscScalar (*f)(PetscScalar));
 static PetscErrorCode waveAtRest(Vec X, PetscScalar (*f)(PetscScalar));
 static PetscScalar constant_func(PetscScalar x);
-static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscScalar tol, PetscBool view);
+static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscBool fourthOrder, PetscScalar tol, PetscBool view);
 
 Ensure(can_build_jacobian)
 {
@@ -81,8 +81,10 @@ static PetscScalar gaussian(PetscScalar x) {
 Ensure(jacobian_and_preconditioner_are_consistent)
 {
   PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(constant_func, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
-  ierr = checkJacobianPreConsistency(sine_wave, 1.0e-2, PETSC_TRUE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(sine_wave, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(sine_wave, PETSC_TRUE, 1.0e-5, PETSC_TRUE);CHKERRV(ierr);
 }
 
 int main(int argc, char **argv)
@@ -97,7 +99,7 @@ int main(int argc, char **argv)
   return result;
 }
 
-static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscScalar tol, PetscBool view) {
+static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScalar), PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -105,7 +107,7 @@ static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScal
   ierr = jacobianSetup(&fixture);CHKERRQ(ierr);
   Vec X = fixture.matFixture.x;
   ierr = waveAtRest(X, state);CHKERRQ(ierr);
-  ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, PETSC_FALSE);CHKERRQ(ierr);
+  ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
   ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
   ierr = scJacobianBuild(fixture.ts, 0.0, X, fixture.Xdot, 0.0, fixture.J, &fixture.jCtx);CHKERRQ(ierr);
@@ -141,10 +143,12 @@ static PetscErrorCode checkJacobianPreConsistency(PetscScalar (*state)(PetscScal
   ierr = VecStrideNorm(fixture.yJ, 0, NORM_2, &err);CHKERRQ(ierr);
   ierr = VecStrideNorm(fixture.matFixture.y, 0, NORM_2, &nrm);CHKERRQ(ierr);
   nrm += 1.0e-6;
+  printf(" err / nrm == %lf\n", err / nrm);
   assert_that((err / nrm < tol), is_true);
   ierr = VecStrideNorm(fixture.yJ, 1, NORM_2, &err);CHKERRQ(ierr);
   ierr = VecStrideNorm(fixture.matFixture.y, 1, NORM_2, &nrm);CHKERRQ(ierr);
   nrm += 1.0e-6;
+  printf(" err / nrm == %lf\n", err / nrm);
   assert_that(err / nrm < tol, is_true);
 
   ierr = jacobianTeardown(&fixture);CHKERRQ(ierr);
