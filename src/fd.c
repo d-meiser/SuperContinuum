@@ -163,7 +163,7 @@ PetscErrorCode scFdAddSecondDerivativeFourthOrder(DM da, Mat m, PetscReal alpha,
 {
   DMDALocalInfo  info;
   PetscInt       i, ii, Mx;
-  MatStencil     col[3] = {{0}},row = {0};
+  MatStencil     col[5] = {{0}},row = {0};
   PetscErrorCode ierr;
   PetscScalar    v[5] = {
     -alpha / (12.0 * SQR(hx)),
