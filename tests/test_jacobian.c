@@ -84,7 +84,9 @@ Ensure(jacobian_and_preconditioner_are_consistent)
   ierr = checkJacobianPreConsistency(constant_func, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
   ierr = checkJacobianPreConsistency(constant_func, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
   ierr = checkJacobianPreConsistency(sine_wave, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
-  ierr = checkJacobianPreConsistency(sine_wave, PETSC_TRUE, 1.0e-5, PETSC_TRUE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(sine_wave, PETSC_TRUE, 1.0e-5, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(gaussian, PETSC_FALSE, 1.0e-1, PETSC_FALSE);CHKERRV(ierr);
+  ierr = checkJacobianPreConsistency(gaussian, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
 }
 
 int main(int argc, char **argv)
