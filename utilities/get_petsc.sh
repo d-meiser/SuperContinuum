@@ -1,5 +1,5 @@
 #!/bin/sh
-PETSC_ARCH=${PETSC_ARCH:-double-dbg}
+PETSC_ARCH=${PETSC_ARCH:-double}
 PETSC_DIR=`pwd`/petsc
 
 WITH_X=${WITH_X:-0}
