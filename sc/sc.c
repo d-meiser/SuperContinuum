@@ -184,10 +184,15 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
   struct AppCtx         *ctx = ptr;
   struct JacobianCtx jctx;
   PetscInt              i;
-  struct Field          *x, *f;
+  struct Field          *x, *xdot, *f;
 
   PetscFunctionBeginUser;
   ierr = VecZeroEntries(F);CHKERRQ(ierr);
+
+  /* Equations:
+   0 = u_t - c u_x - v
+   0 = (1 + 3 gamma u^2) v_t - c v_x - c^2 u_xx + 6 gamma u v^2
+   */
 
   /* linear term */
   jctx.fftData = &ctx->fftData;
@@ -198,11 +203,13 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);
   ierr = DMDAVecGetArray(da,F,&f);CHKERRQ(ierr);
   for (i = info.xs; i < info.xs + info.xm; ++i) {
-    f[i].u += -ctx->problem.gamma * SQR(x[i].u) * x[i].u;
+    f[i].v += 3.0 * ctx->problem.gamma * x[i].u * (x[i].u * xdot[i].v + 2.0 * SQR(x[i].v));
   }
   ierr = DMDAVecRestoreArray(da,F,&f);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
 
   /* Time derivative term */
