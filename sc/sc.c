@@ -125,7 +125,7 @@ int main(int argc,char **argv) {
 
   ierr = TSSetIFunction(ts, NULL, SCIFunction,&user);CHKERRQ(ierr);
   ierr = DMCreateMatrix(da,&Jprec);CHKERRQ(ierr);
-  ierr = scJacobianBuildConstantPart(da, Jprec, user.useFourthOrder);CHKERRQ(ierr);
+  ierr = scJacobianBuildLinearPart(da, Jprec, user.useFourthOrder);CHKERRQ(ierr);
   ierr = MatSetOption(Jprec, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE);CHKERRQ(ierr);
   ierr = MatStoreValues(Jprec);CHKERRQ(ierr);
   ierr = MatGetLocalSize(Jprec, &m, &n);CHKERRQ(ierr);
@@ -256,7 +256,7 @@ PetscErrorCode FormInitialSolution(DM da,Vec U)
 }
 
 PetscScalar initialState(PetscReal x) {
-  return exp(-SQR(SQR(SQR(SQR(SQR(x / 0.1))))));
+  return exp(-SQR(SQR(SQR(x / 0.1))));
 }
 
 PetscErrorCode MyTSMonitor(TS ts,PetscInt step,PetscReal ptime,Vec v,void *ctx)

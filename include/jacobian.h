@@ -33,7 +33,7 @@ struct JacobianCtx {
 };
 
 
-SC_API PetscErrorCode scJacobianBuildConstantPart(DM da, Mat J, PetscBool fourthOrder);
+SC_API PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOrder);
 SC_API PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y);

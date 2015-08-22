@@ -29,7 +29,7 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
 
-PetscErrorCode scJacobianBuildConstantPart(DM da, Mat J, PetscBool fourthOrder)
+PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOrder)
 {
   PetscErrorCode ierr;
 

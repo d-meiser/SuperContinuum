@@ -52,7 +52,7 @@ Ensure(can_build_jacobian)
   struct MatFixture fixture;
   PetscErrorCode ierr;
   ierr = scMatSetup(&fixture);CHKERRV(ierr);
-  ierr = scJacobianBuildConstantPart(fixture.da, fixture.m, PETSC_FALSE);CHKERRV(ierr);
+  ierr = scJacobianBuildLinearPart(fixture.da, fixture.m, PETSC_FALSE);CHKERRV(ierr);
   assert_that(ierr, is_equal_to(0));
   ierr = scMatTeardown(&fixture);CHKERRV(ierr);
 }
@@ -62,7 +62,7 @@ Ensure(can_build_jacobian_fourth_order)
   struct MatFixture fixture;
   PetscErrorCode ierr;
   ierr = scMatSetup(&fixture);CHKERRV(ierr);
-  ierr = scJacobianBuildConstantPart(fixture.da, fixture.m, PETSC_TRUE);CHKERRV(ierr);
+  ierr = scJacobianBuildLinearPart(fixture.da, fixture.m, PETSC_TRUE);CHKERRV(ierr);
   assert_that(ierr, is_equal_to(0));
   ierr = scMatTeardown(&fixture);CHKERRV(ierr);
 }
@@ -202,7 +202,7 @@ static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm 
   ierr = jacobianSetup(&fixture, alpha, gamma);CHKERRQ(ierr);
   Vec X = fixture.matFixture.x;
   ierr = filler(X, f);CHKERRQ(ierr);
-  ierr = scJacobianBuildConstantPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
+  ierr = scJacobianBuildLinearPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
   ierr = MatStoreValues(fixture.Jpre);CHKERRQ(ierr);
   ierr = scJacobianBuildPre(fixture.ts, 0.0, X, fixture.Xdot, alpha, fixture.Jpre, &fixture.jCtx);CHKERRQ(ierr);
   ierr = scJacobianBuild(fixture.ts, 0.0, X, fixture.Xdot, alpha, fixture.J, &fixture.jCtx);CHKERRQ(ierr);
