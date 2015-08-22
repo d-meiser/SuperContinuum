@@ -29,6 +29,33 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
 
+PetscErrorCode scJacobianCreate(struct FftData *fftData, struct ProblemSpec *problem, struct JacobianCtx *ctx)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  ctx->alpha = 0;
+  ctx->fftData = fftData;
+  ctx->problem = problem;
+  ctx->X0 = 0;
+  ctx->Xdot0 = 0;
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianDestroy(struct JacobianCtx *ctx)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  if (ctx->X0) {
+    ierr = VecDestroy(&ctx->X0);CHKERRQ(ierr);
+  }
+  if (ctx->Xdot0) {
+    ierr = VecDestroy(&ctx->Xdot0);CHKERRQ(ierr);
+  }
+  PetscFunctionReturn(0);
+}
+
 PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOrder)
 {
   PetscErrorCode ierr;

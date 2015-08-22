@@ -30,9 +30,13 @@ struct JacobianCtx {
   PetscScalar        alpha;
   struct FftData     *fftData;
   struct ProblemSpec *problem;
+  Vec                X0;
+  Vec                Xdot0;
 };
 
 
+SC_API PetscErrorCode scJacobianCreate(struct FftData *fftData, struct ProblemSpec *problem, struct JacobianCtx *ctx);
+SC_API PetscErrorCode scJacobianDestroy(struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOrder);
 SC_API PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);

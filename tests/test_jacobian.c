@@ -257,9 +257,8 @@ static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture, PetscScalar
   ierr = scMatSetup(&fixture->matFixture);CHKERRQ(ierr);
   ierr = scFftCreateFftData(fixture->matFixture.da, &fixture->fftData);CHKERRQ(ierr);
   fixture->problem.gamma = gamma;
+  ierr = scJacobianCreate(&fixture->fftData, &fixture->problem, &fixture->jCtx);CHKERRQ(ierr);
   fixture->jCtx.alpha = alpha;
-  fixture->jCtx.fftData = &fixture->fftData;
-  fixture->jCtx.problem = &fixture->problem;
 
   fixture->Jpre = fixture->matFixture.m;
 
@@ -293,6 +292,7 @@ static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture) {
   ierr = MatDestroy(&fixture->J);CHKERRQ(ierr);
   ierr = scFftDestroyFftData(&fixture->fftData);CHKERRQ(ierr);
   ierr = scMatTeardown(&fixture->matFixture);CHKERRQ(ierr);
+  ierr = scJacobianDestroy(&fixture->jCtx);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
