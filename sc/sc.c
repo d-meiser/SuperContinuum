@@ -115,8 +115,7 @@ int main(int argc,char **argv) {
   }
 
   ierr = scFftCreateFftData(da, &user.fftData);CHKERRQ(ierr);
-  user.jctx.fftData = &user.fftData;
-  user.jctx.problem = &user.problem;
+  ierr = scJacobianCreate(&user.fftData, &user.problem, &user.jctx);CHKERRQ(ierr);
 
   ierr = TSCreate(PETSC_COMM_WORLD,&ts);CHKERRQ(ierr);
   ierr = TSSetDM(ts,da);CHKERRQ(ierr);
@@ -165,6 +164,7 @@ int main(int argc,char **argv) {
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = MatDestroy(&J);CHKERRQ(ierr);
   ierr = MatDestroy(&Jprec);CHKERRQ(ierr);
+  ierr = scJacobianDestroy(&user.jctx);CHKERRQ(ierr);
   if (user.monitorRealSpace) {
     ierr = PetscViewerDestroy(&user.viewerRealSpace);CHKERRQ(ierr);
   }

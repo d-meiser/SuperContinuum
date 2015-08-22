@@ -137,9 +137,18 @@ PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J)
 
 PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx)
 {
+  PetscReal ierr;
+
   PetscFunctionBegin;
   ctx->alpha = a;
-  /* have to compute the chi3 part here, too */
+  if (!ctx->X0) {
+    ierr = VecDuplicate(X, &ctx->X0);CHKERRQ(ierr);
+  }
+  ierr = VecCopy(X, ctx->X0);CHKERRQ(ierr);
+  if (!ctx->Xdot0) {
+    ierr = VecDuplicate(Xdot, &ctx->Xdot0);CHKERRQ(ierr);
+  }
+  ierr = VecCopy(Xdot, ctx->Xdot0);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
