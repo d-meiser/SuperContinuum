@@ -31,8 +31,6 @@ static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
 
 PetscErrorCode scJacobianCreate(struct FftData *fftData, struct ProblemSpec *problem, struct JacobianCtx *ctx)
 {
-  PetscErrorCode ierr;
-
   PetscFunctionBegin;
   ctx->alpha = 0;
   ctx->fftData = fftData;
@@ -157,10 +155,9 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
   PetscErrorCode ierr;
   DMDALocalInfo  info;
   DM             da;
-  struct Field   *x;
   PetscInt       i, c;
   PetscScalar    v;
-  MatStencil     col = {0}, row = {0};
+  MatStencil     col = {0};
 
   PetscFunctionBegin;
   ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
@@ -199,7 +196,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   PetscInt              i,imin,imax,Mx;
   PetscReal             k;
   struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde, *u;
+  PetscScalar           *utilde, *vtilde;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
