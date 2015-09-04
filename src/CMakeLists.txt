@@ -15,5 +15,6 @@ set_target_properties(sc_lib PROPERTIES
             SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
             VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}
             )
+target_link_libraries(sc_lib ${COV_LIBRARIES})
 install(TARGETS sc_lib DESTINATION lib)
 
