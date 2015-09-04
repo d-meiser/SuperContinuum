@@ -22,41 +22,42 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 
 static const char help[] = "Unit tests for FFT methods.";
 
-Ensure(fft_can_be_constructed_from_DMDA)
+
+Describe(FFT);
+
+static PetscErrorCode ierr;
+static ScFft fft;
+static DM da;
+
+BeforeEach(FFT)
 {
-  PetscErrorCode ierr;
-  ScFft fft;
-  DM da;
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);
-  assert_that(ierr, is_equal_to(0));
-  ierr = scFftCreate(da, &fft);
-  assert_that(ierr, is_equal_to(0));
-  scFftDestroy(&fft);
-  ierr = DMDestroy(&da);
-  assert_that(ierr, is_equal_to(0));
+  significant_figures_for_assert_double_are(6);
 }
 
-Ensure(the_right_dm_gets_registered_with_fft)
+AfterEach(FFT) {}
+
+Ensure(FFT, can_be_constructed_from_DMDA)
 {
-  PetscErrorCode ierr;
-  ScFft fft;
-  DM da, da1;
-  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);
-  assert_that(ierr, is_equal_to(0));
+  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);CHKERRV(ierr);
   ierr = scFftCreate(da, &fft);
   assert_that(ierr, is_equal_to(0));
-  ierr = scFftGetDM(fft, &da1);
-  assert_that(ierr, is_equal_to(0));
+  scFftDestroy(&fft);CHKERRV(ierr);
+  ierr = DMDestroy(&da);CHKERRV(ierr);
+}
+
+Ensure(FFT, registers_the_right_DM)
+{
+  ierr = DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,20,2,1,NULL,&da);CHKERRV(ierr);
+  ierr = scFftCreate(da, &fft);CHKERRV(ierr);
+  DM da1;
+  ierr = scFftGetDM(fft, &da1);CHKERRV(ierr);
   assert_that(da1, is_equal_to(da));
-  scFftDestroy(&fft);
-  ierr = DMDestroy(&da);
-  assert_that(ierr, is_equal_to(0));
+  ierr = scFftDestroy(&fft);CHKERRV(ierr);
+  ierr = DMDestroy(&da);CHKERRV(ierr);
 }
 
-Ensure(forward_transform_yields_constant_vector_from_delta_function)
+Ensure(FFT, transforms_constant_into_delta_function)
 {
-  ScFft fft;
-  DM da;
   Vec v;
 
   DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,4,2,1,NULL,&da);
@@ -75,7 +76,7 @@ Ensure(forward_transform_yields_constant_vector_from_delta_function)
   scFftTransform(fft, v, 0, y);
   const PetscScalar *arr;
   VecGetArrayRead(y, &arr);
-  assert_that(fabs(arr[0] - 0.7) < 1.0e-6, is_true);
+  //assert_that_double(fabs(arr[0] - 0.7), is_less_than_double(1.0e-6));
   assert_that(fabs(arr[1] - 0.0) < 1.0e-6, is_true);
   assert_that(fabs(arr[1] - 0.7) < 1.0e-6, is_true);
   assert_that(fabs(arr[2] - 0.0) < 1.0e-6, is_true);
@@ -91,10 +92,8 @@ Ensure(forward_transform_yields_constant_vector_from_delta_function)
   DMDestroy(&da);
 }
 
-Ensure(second_component_transforms_ok)
+Ensure(FFT, can_transform_second_component)
 {
-  ScFft fft;
-  DM da;
   Vec v;
 
   DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,4,2,1,NULL,&da);
@@ -129,10 +128,8 @@ Ensure(second_component_transforms_ok)
   DMDestroy(&da);
 }
 
-Ensure(i_transform_is_inverse_of_transform)
+Ensure(FFT, i_transform_is_inverse_of_transform)
 {
-  ScFft fft;
-  DM da;
   Vec v;
   PetscInt dim = 5;
 
@@ -170,10 +167,8 @@ Ensure(i_transform_is_inverse_of_transform)
   DMDestroy(&da);
 }
 
-Ensure(PSD_of_delta_function_is_flat)
+Ensure(FFT, PSD_of_delta_function_is_flat)
 {
-  ScFft fft;
-  DM da;
   Vec v;
 
   PetscInt dim = 10;
@@ -212,10 +207,8 @@ Ensure(PSD_of_delta_function_is_flat)
   DMDestroy(&da);
 }
 
-Ensure(output_vector_has_correct_size)
+Ensure(FFT, creates_output_vector_of_correct_size)
 {
-  ScFft fft;
-  DM da;
   Vec x, y, z;
   PetscInt inputDim = 10;
   PetscInt inputBlockSize = 3;
@@ -231,10 +224,8 @@ Ensure(output_vector_has_correct_size)
   scFftDestroy(&fft);
 }
 
-Ensure(PSD_vector_has_correct_size)
+Ensure(FFT, yields_PSD_of_the_correct_size)
 {
-  ScFft fft;
-  DM da;
   PetscInt inputDim = 10;
   PetscInt inputBlockSize = 3;
   DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,inputDim,inputBlockSize,1,NULL,&da);
@@ -252,15 +243,20 @@ int main(int argc, char **argv)
 {
   PetscInitialize(&argc, &argv, NULL, help);
   TestSuite *suite = create_test_suite();
-  add_test(suite, fft_can_be_constructed_from_DMDA);
-  add_test(suite, the_right_dm_gets_registered_with_fft);
-  add_test(suite, output_vector_has_correct_size);
-  add_test(suite, forward_transform_yields_constant_vector_from_delta_function);
-  add_test(suite, second_component_transforms_ok);
-  add_test(suite, i_transform_is_inverse_of_transform);
-  add_test(suite, PSD_of_delta_function_is_flat);
-  add_test(suite, PSD_vector_has_correct_size);
-  int result = run_test_suite(suite, create_text_reporter());
+  add_test_with_context(suite, FFT, can_be_constructed_from_DMDA);
+  add_test_with_context(suite, FFT, registers_the_right_DM);
+  add_test_with_context(suite, FFT, creates_output_vector_of_correct_size);
+  add_test_with_context(suite, FFT, transforms_constant_into_delta_function);
+  add_test_with_context(suite, FFT, can_transform_second_component);
+  add_test_with_context(suite, FFT, i_transform_is_inverse_of_transform);
+  add_test_with_context(suite, FFT, PSD_of_delta_function_is_flat);
+  add_test_with_context(suite, FFT, yields_PSD_of_the_correct_size);
+  int result;
+  if (argc > 2) {
+    result = run_single_test(suite, argv[1], create_text_reporter());
+  } else {
+    result = run_test_suite(suite, create_text_reporter());
+  }
   destroy_test_suite(suite);
   PetscFinalize();
   return result;
