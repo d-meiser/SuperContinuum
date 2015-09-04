@@ -29,7 +29,32 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
 
-PetscErrorCode scJacobianBuildConstantPart(DM da, Mat J, PetscBool fourthOrder)
+PetscErrorCode scJacobianCreate(struct FftData *fftData, struct ProblemSpec *problem, struct JacobianCtx *ctx)
+{
+  PetscFunctionBegin;
+  ctx->alpha = 0;
+  ctx->fftData = fftData;
+  ctx->problem = problem;
+  ctx->X0 = 0;
+  ctx->Xdot0 = 0;
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianDestroy(struct JacobianCtx *ctx)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBegin;
+  if (ctx->X0) {
+    ierr = VecDestroy(&ctx->X0);CHKERRQ(ierr);
+  }
+  if (ctx->Xdot0) {
+    ierr = VecDestroy(&ctx->Xdot0);CHKERRQ(ierr);
+  }
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOrder)
 {
   PetscErrorCode ierr;
 
@@ -110,9 +135,18 @@ PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J)
 
 PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx)
 {
+  PetscReal ierr;
+
   PetscFunctionBegin;
   ctx->alpha = a;
-  /* have to compute the chi3 part here, too */
+  if (!ctx->X0) {
+    ierr = VecDuplicate(X, &ctx->X0);CHKERRQ(ierr);
+  }
+  ierr = VecCopy(X, ctx->X0);CHKERRQ(ierr);
+  if (!ctx->Xdot0) {
+    ierr = VecDuplicate(Xdot, &ctx->Xdot0);CHKERRQ(ierr);
+  }
+  ierr = VecCopy(Xdot, ctx->Xdot0);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -121,28 +155,15 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
   PetscErrorCode ierr;
   DMDALocalInfo  info;
   DM             da;
-  struct Field   *x;
   PetscInt       i, c;
   PetscScalar    v;
-  MatStencil     col = {0}, row = {0};
+  MatStencil     col = {0};
 
   PetscFunctionBegin;
   ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
   ierr = MatRetrieveValues(Jpre);CHKERRQ(ierr);
   ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-
-  /* Non-linear term */
-  row.c = 0;
-  col.c = 0;
-  ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
-  for (i=info.xs; i<info.xs+info.xm; i++) {
-    row.i = i;
-    col.i = i;
-    v = -3.0 * ctx->problem->gamma * SQR(x[i].u);
-    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
-  }
-  ierr = DMDAVecRestoreArrayRead(da,X,&x);CHKERRQ(ierr);
 
   /* Time derivative terms */
   v = a;
@@ -175,7 +196,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   PetscInt              i,imin,imax,Mx;
   PetscReal             k;
   struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde, *u;
+  PetscScalar           *utilde, *vtilde;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
