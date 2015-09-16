@@ -25,6 +25,7 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #define SQR(a) ((a) * (a))
 #endif
 
+add some stuff that breaks the code;
 
 static PetscErrorCode buildConstantPartOfJacobian(DM da, Mat J);
 static PetscErrorCode buildConstantPartOfJacobianFourthOrder(DM da, Mat J);
