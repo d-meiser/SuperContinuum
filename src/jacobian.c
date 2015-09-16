@@ -197,6 +197,7 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   PetscReal             k;
   struct Cmplx          tmpu, tmpv;
   PetscScalar           *utilde, *vtilde;
+  struct Field          *x, *xt;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
@@ -205,12 +206,12 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   /* sampling frequency */
   PetscScalar hx = 1.0 / (Mx - 1);
   PetscScalar kNyquist = M_PI / hx;
-  
+
   /*
   Equations:
 
-  gu = u_t - c u_x - v - gamma * u^3
-  gv = v_t - c v_x - u_xx
+  gu = u_t - c u_x - v
+  gv = (1 + 3 gamma u^2) v_t - c v_x - u_xx + 6 gamma u v^2
 
   The time derivative terms are added in real space, all other terms are
   dealt with in the frequency domain.
@@ -245,6 +246,9 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
 
   /* time dependent term */
   ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
+
+  /* Non-linear terms */
+
 
   PetscFunctionReturn(0);
 }
