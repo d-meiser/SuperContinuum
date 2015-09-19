@@ -25,6 +25,8 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 
 static const char help[] = "Unit tests for Jacobian construction methods.";
 
+Describe(SecondOrderJacobian);
+
 struct JacobianFixture {
   struct MatFixture  matFixture;
   struct FftData     fftData;
@@ -36,132 +38,74 @@ struct JacobianFixture {
   Vec                Xdot;
   Vec                yJ;
 };
+static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture, PetscScalar alpha, PetscScalar gamma);
+static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
+
+struct JacobianFixture fixture;
+PetscErrorCode ierr;
+
+BeforeEach(SecondOrderJacobian) {
+  jacobianSetup(&fixture, 0, 0);
+}
+AfterEach(SecondOrderJacobian) {
+  jacobianTeardown(&fixture);
+}
+
 
 typedef PetscScalar (*WaveForm)(PetscScalar);
 typedef PetscErrorCode (*FillerMethod)(Vec, WaveForm);
 
-static PetscErrorCode jacobianSetup(struct JacobianFixture* fixture, PetscScalar alpha, PetscScalar gamma);
-static PetscErrorCode jacobianTeardown(struct JacobianFixture* fixture);
 static PetscErrorCode rightMovingWave(Vec X, WaveForm f);
 static PetscErrorCode waveAtRest(Vec X, WaveForm f);
 static PetscScalar constant_func(PetscScalar x);
 static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm f, PetscScalar alpha, PetscScalar gamma, PetscBool fourthOrder, PetscScalar tol, PetscBool view);
 
-Ensure(can_build_jacobian)
-{
-  struct MatFixture fixture;
-  PetscErrorCode ierr;
-  ierr = scMatSetup(&fixture);CHKERRV(ierr);
-  ierr = scJacobianBuildLinearPart(fixture.da, fixture.m, PETSC_FALSE);CHKERRV(ierr);
+Ensure(SecondOrderJacobian, can_be_built) {
+  ierr = scJacobianBuildLinearPart(fixture.matFixture.da, fixture.matFixture.m, PETSC_FALSE);CHKERRV(ierr);
   assert_that(ierr, is_equal_to(0));
-  ierr = scMatTeardown(&fixture);CHKERRV(ierr);
 }
 
-Ensure(can_build_jacobian_fourth_order)
-{
-  struct MatFixture fixture;
-  PetscErrorCode ierr;
-  ierr = scMatSetup(&fixture);CHKERRV(ierr);
-  ierr = scJacobianBuildLinearPart(fixture.da, fixture.m, PETSC_TRUE);CHKERRV(ierr);
-  assert_that(ierr, is_equal_to(0));
-  ierr = scMatTeardown(&fixture);CHKERRV(ierr);
-}
-
-static PetscScalar constant_func(PetscScalar x) {
-  return 2.3;
-}
-
+/* We'll be using the following functions to generate wave forms for the
+   tests for the various.*/
+static PetscScalar constant_func(PetscScalar x) { return 2.3; }
 static PetscScalar sine_wave(PetscScalar x) {
   PetscScalar k = 2.0 * M_PI * 1.0;
   return sin(k * x);
 }
-
 static PetscScalar gaussian(PetscScalar x) {
   PetscScalar sigma = 0.1;
   return exp(-(x * x) / (sigma * sigma));
 }
 
-Ensure(prec_consistent_constant)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_constant_fields) {
   ierr = checkJacobianPreConsistency(waveAtRest, constant_func, 0.0, 0.0, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_constant_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(waveAtRest, constant_func, 0.0, 0.0, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_sine_wave)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_sine_waves) {
   ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 0.0, 0.0, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_sine_wave_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 0.0, 0.0, PETSC_TRUE, 1.0e-5, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_gaussian)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_gaussian) {
   ierr = checkJacobianPreConsistency(waveAtRest, gaussian, 0.0, 0.0, PETSC_FALSE, 1.0e-1, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_gaussian_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(waveAtRest, gaussian, 0.0, 0.0, PETSC_TRUE, 5.0e-3, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_constant_right_moving)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_constant_right_moving) {
   ierr = checkJacobianPreConsistency(rightMovingWave, constant_func, 0.0, 0.0, PETSC_FALSE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_constant_right_moving_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(rightMovingWave, constant_func, 0.0, 0.0, PETSC_TRUE, 1.0e-6, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_sine_wave_right_moving)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_sine_wave_right_moving) {
   ierr = checkJacobianPreConsistency(rightMovingWave, sine_wave, 0.0, 0.0, PETSC_FALSE, 1.0e0, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_sine_wave_right_moving_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(rightMovingWave, sine_wave, 0.0, 0.0, PETSC_TRUE, 1.0e-3, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_gaussian_right_moving)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_gaussian_right_moving) {
   ierr = checkJacobianPreConsistency(rightMovingWave, gaussian, 0.0, 0.0, PETSC_FALSE, 2.0e0, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_gaussian_right_moving_fourth_order)
-{
-  PetscErrorCode ierr;
-  ierr = checkJacobianPreConsistency(rightMovingWave, gaussian, 0.0, 0.0, PETSC_TRUE, 1.0e0, PETSC_FALSE);CHKERRV(ierr);
-}
-
-Ensure(prec_consistent_sine_wave_non_zero_alpha)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_sine_wave_non_zero_alpha) {
   ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 1.0, 0.0, PETSC_FALSE, 1.0e-2, PETSC_FALSE);CHKERRV(ierr);
 }
 
-Ensure(prec_consistent_sine_wave_non_zero_gamma)
-{
-  PetscErrorCode ierr;
+Ensure(SecondOrderJacobian, is_consistent_for_sine_wave_non_zero_gamma) {
   ierr = checkJacobianPreConsistency(waveAtRest, sine_wave, 0.0, 1.0, PETSC_FALSE, 1.0e-2, PETSC_TRUE);CHKERRV(ierr);
 }
 
@@ -170,36 +114,32 @@ int main(int argc, char **argv)
 {
   PetscInitialize(&argc, &argv, NULL, help);
   TestSuite *suite = create_test_suite();
-  add_test(suite, can_build_jacobian);
-  add_test(suite, can_build_jacobian_fourth_order);
-  add_test(suite, prec_consistent_constant);
-  add_test(suite, prec_consistent_constant_fourth_order);
-  add_test(suite, prec_consistent_sine_wave);
-  add_test(suite, prec_consistent_sine_wave_fourth_order);
-  add_test(suite, prec_consistent_gaussian);
-  add_test(suite, prec_consistent_gaussian_fourth_order);
-  add_test(suite, prec_consistent_constant_right_moving);
-  add_test(suite, prec_consistent_constant_right_moving_fourth_order);
-  add_test(suite, prec_consistent_sine_wave_right_moving);
-  add_test(suite, prec_consistent_sine_wave_right_moving_fourth_order);
-  add_test(suite, prec_consistent_gaussian_right_moving);
-  add_test(suite, prec_consistent_gaussian_right_moving_fourth_order);
-  add_test(suite, prec_consistent_sine_wave_non_zero_alpha);
+  add_test_with_context(suite, SecondOrderJacobian, can_be_built);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_constant_fields);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_sine_waves);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_gaussian);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_constant_right_moving);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_sine_wave_right_moving);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_gaussian_right_moving);
+  add_test_with_context(suite, SecondOrderJacobian, is_consistent_for_sine_wave_non_zero_alpha);
   /* Disable this test for now, need the right Chi3 physics
   add_test(suite, prec_consistent_sine_wave_non_zero_gamma);
   */
-  int result = run_test_suite(suite, create_text_reporter());
+  int result;
+  if (argc > 2) {
+    result = run_single_test(suite, argv[1], create_text_reporter());
+  } else {
+    result = run_test_suite(suite, create_text_reporter());
+  }
   destroy_test_suite(suite);
   PetscFinalize();
   return result;
 }
 
 static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm f, PetscScalar alpha, PetscScalar gamma, PetscBool fourthOrder, PetscScalar tol, PetscBool view) {
-  PetscErrorCode ierr;
-
   PetscFunctionBegin;
-  struct JacobianFixture fixture;
-  ierr = jacobianSetup(&fixture, alpha, gamma);CHKERRQ(ierr);
+  fixture.jCtx.alpha = alpha;
+  fixture.problem.gamma = gamma;
   Vec X = fixture.matFixture.x;
   ierr = filler(X, f);CHKERRQ(ierr);
   ierr = scJacobianBuildLinearPart(fixture.matFixture.da, fixture.Jpre, fourthOrder);CHKERRQ(ierr);
@@ -238,15 +178,11 @@ static PetscErrorCode checkJacobianPreConsistency(FillerMethod filler, WaveForm 
   ierr = VecStrideNorm(fixture.yJ, 0, NORM_2, &err);CHKERRQ(ierr);
   ierr = VecStrideNorm(fixture.matFixture.y, 0, NORM_2, &nrm);CHKERRQ(ierr);
   nrm += 1.0e-6;
-  printf(" err / nrm == %lf\n", err / nrm);
   assert_that((err / nrm < tol), is_true);
   ierr = VecStrideNorm(fixture.yJ, 1, NORM_2, &err);CHKERRQ(ierr);
   ierr = VecStrideNorm(fixture.matFixture.y, 1, NORM_2, &nrm);CHKERRQ(ierr);
   nrm += 1.0e-6;
-  printf(" err / nrm == %lf\n", err / nrm);
   assert_that(err / nrm < tol, is_true);
-
-  ierr = jacobianTeardown(&fixture);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
