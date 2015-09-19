@@ -1,6 +1,7 @@
 set(TESTS
     FFT
     FD
+    jacobian
     jacobian_second_order
     jacobian_fourth_order
    )
