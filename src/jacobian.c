@@ -157,7 +157,9 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
   DM             da;
   PetscInt       i, c;
   PetscScalar    v;
-  MatStencil     col = {0};
+  const PetscScalar *x0;
+  const PetscScalar *xdot0;
+  MatStencil     col = {0}, row = {0};
 
   PetscFunctionBegin;
   ierr = MatZeroEntries(Jpre);CHKERRQ(ierr);
@@ -174,6 +176,28 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
       ierr=MatSetValuesStencil(Jpre,1,&col,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
     }
   }
+
+  /* Nonlinear terms */
+  ierr = VecGetArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
+  ierr = VecGetArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
+  for (i = info.xs; i < info.xs + info.xm; ++i) {
+    PetscScalar u = x0[2 * i];
+    PetscScalar v = x0[2 * i + 1];
+    PetscScalar vt = xdot0[2 * i + 1];
+    PetscScalar gamma = ctx->problem->gamma;
+    row.i = i;
+    row.c = 1;
+    col.i = i;
+    col.c = 0;
+    v = 6.0 * gamma * (u * vt + SQR(v)); 
+    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+    col.c = 1;
+    v = (12.0 * gamma * u * v + 3.0 * ctx->alpha * gamma * SQR(u));
+    ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
+  }
+  ierr = VecRestoreArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
+
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   PetscFunctionReturn(0);
