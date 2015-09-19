@@ -178,16 +178,18 @@ int main(int argc,char **argv) {
 
 PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
 {
-  PetscErrorCode        ierr;
-  DM                    da;
-  DMDALocalInfo         info;
-  struct AppCtx         *ctx = ptr;
+  PetscErrorCode     ierr;
+  DM                 da;
+  DMDALocalInfo      info;
+  struct AppCtx      *ctx = ptr;
   struct JacobianCtx jctx;
-  PetscInt              i;
-  struct Field          *x, *xdot, *f;
+  PetscInt           i;
+  struct Field       *x, *xdot, *f;
 
   PetscFunctionBeginUser;
   ierr = VecZeroEntries(F);CHKERRQ(ierr);
+
+  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
 
   /* Equations:
    0 = u_t - c u_x - v
@@ -197,10 +199,15 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
   /* linear term */
   jctx.fftData = &ctx->fftData;
   jctx.alpha = 0.0;
-  ierr = scJacobianApply(&jctx, X, F);
+  ierr = DMGetGlobalVector(da, &jctx.X0);CHKERRQ(ierr);
+  ierr = DMGetGlobalVector(da, &jctx.Xdot0);CHKERRQ(ierr);
+  ierr = VecCopy(X, jctx.X0);CHKERRQ(ierr);
+  ierr = VecCopy(Xdot, jctx.Xdot0);CHKERRQ(ierr);
+  ierr = scJacobianApply(&jctx, X, F);CHKERRQ(ierr);
+  ierr = DMRestoreGlobalVector(da, &jctx.Xdot0);CHKERRQ(ierr);
+  ierr = DMRestoreGlobalVector(da, &jctx.X0);CHKERRQ(ierr);
 
   /* Nonlinear term */
-  ierr = TSGetDM(ts,&da);CHKERRQ(ierr);
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
   ierr = DMDAVecGetArrayRead(da,X,&x);CHKERRQ(ierr);
   ierr = DMDAVecGetArrayRead(da,Xdot,&xdot);CHKERRQ(ierr);

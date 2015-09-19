@@ -192,12 +192,14 @@ PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y)
 
 PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
 {
-  PetscErrorCode        ierr;
-  PetscInt              i,imin,imax,Mx;
-  PetscReal             k;
-  struct Cmplx          tmpu, tmpv;
-  PetscScalar           *utilde, *vtilde;
-  struct Field          *x, *xt;
+  PetscErrorCode    ierr;
+  PetscInt          i,imin,imax,Mx;
+  PetscReal         k;
+  struct Cmplx      tmpu, tmpv;
+  PetscScalar       *utilde, *vtilde, *yarr;
+  const PetscScalar *x0;
+  const PetscScalar *xdot0;
+  const PetscScalar *xarr;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
@@ -248,6 +250,26 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
 
   /* Non-linear terms */
+  ierr = VecGetArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
+  ierr = VecGetArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
+  ierr = VecGetArray(y, &yarr);CHKERRQ(ierr);
+  ierr = VecGetArrayRead(x, &xarr);CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(y, &imin, &imax);CHKERRQ(ierr);
+  imin /= 2;
+  imax /= 2;
+  for (i = imin; i < imax; ++i) {
+    PetscScalar u = x0[2 * i];
+    PetscScalar v = x0[2 * i + 1];
+    PetscScalar vt = xdot0[2 * i + 1];
+    PetscScalar gamma = ctx->problem->gamma;
+    yarr[2 * i + 1] +=
+      6.0 * gamma * (u * vt + SQR(v)) * xarr[2 * i] +
+      (12.0 * gamma * u * v + 3.0 * ctx->alpha * gamma * SQR(u)) * xarr[2 * i + 1];
+  }
+  ierr = VecRestoreArrayRead(x, &xarr);CHKERRQ(ierr);
+  ierr = VecRestoreArray(y, &yarr);CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
 
 
   PetscFunctionReturn(0);
