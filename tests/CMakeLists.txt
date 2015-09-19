@@ -2,7 +2,7 @@ set(TESTS
     FFT
     FD
     jacobian
-#jacobian_fourth_order
+    jacobian_fourth_order
    )
 
 include_directories(
