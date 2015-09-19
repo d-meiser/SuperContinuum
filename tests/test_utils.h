@@ -19,6 +19,7 @@ with SuperContinuum.  If not, see <http://www.gnu.org/licenses/>.
 #ifndef TEST_UTILS_H
 #define TEST_UTILS_H
 
+#include <ScTestUtilsExport.h>
 #include <petscdmda.h>
 #include <petscmat.h>
 #include <petscvec.h>
@@ -37,7 +38,7 @@ struct MatFixture {
   PetscScalar *yarr;
 };
 
-SC_API PetscErrorCode scMatSetup(struct MatFixture* fixture);
-SC_API PetscErrorCode scMatTeardown(struct MatFixture* fixture);
+SC_TEST_UTILS_API PetscErrorCode scMatSetup(struct MatFixture* fixture);
+SC_TEST_UTILS_API PetscErrorCode scMatTeardown(struct MatFixture* fixture);
 
 #endif
