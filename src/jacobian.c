@@ -178,8 +178,8 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
   }
 
   /* Nonlinear terms */
-  ierr = VecGetArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
-  ierr = VecGetArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
+  ierr = VecGetArrayRead(X, &x0);CHKERRQ(ierr);
+  ierr = VecGetArrayRead(Xdot, &xdot0);CHKERRQ(ierr);
   for (i = info.xs; i < info.xs + info.xm; ++i) {
     PetscScalar u = x0[2 * i];
     PetscScalar v = x0[2 * i + 1];
@@ -195,8 +195,8 @@ PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal
     v = (12.0 * gamma * u * v + 3.0 * ctx->alpha * gamma * SQR(u));
     ierr=MatSetValuesStencil(Jpre,1,&row,1,&col,&v,ADD_VALUES);CHKERRQ(ierr);
   }
-  ierr = VecRestoreArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
-  ierr = VecRestoreArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(Xdot, &xdot0);CHKERRQ(ierr);
+  ierr = VecRestoreArrayRead(X, &x0);CHKERRQ(ierr);
 
   ierr=MatAssemblyBegin(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr=MatAssemblyEnd(Jpre,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
