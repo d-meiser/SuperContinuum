@@ -41,6 +41,7 @@ SC_API PetscErrorCode scJacobianBuildLinearPart(DM da, Mat J, PetscBool fourthOr
 SC_API PetscErrorCode scJacobianBuild(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianBuildPre(TS ts, PetscReal t, Vec X, Vec Xdot, PetscReal a, Mat J, struct JacobianCtx *ctx);
 SC_API PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y);
+SC_API PetscErrorCode scJacobianLinearPartApply(struct JacobianCtx* ctx, Vec x, Vec y);
 SC_API PetscErrorCode scJacobianApply(struct JacobianCtx* ctx, Vec x, Vec y);
 
 #endif

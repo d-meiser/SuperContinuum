@@ -190,16 +190,13 @@ PetscErrorCode scJacobianMatMult(Mat J, Vec x, Vec y)
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
+PetscErrorCode scJacobianLinearPartApply(struct JacobianCtx *ctx, Vec x, Vec y)
 {
   PetscErrorCode    ierr;
   PetscInt          i,imin,imax,Mx;
   PetscReal         k;
   struct Cmplx      tmpu, tmpv;
-  PetscScalar       *utilde, *vtilde, *yarr;
-  const PetscScalar *x0;
-  const PetscScalar *xdot0;
-  const PetscScalar *xarr;
+  PetscScalar       *utilde, *vtilde;
 
   PetscFunctionBegin;
   ierr = VecZeroEntries(y);CHKERRQ(ierr);
@@ -208,16 +205,6 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   /* sampling frequency */
   PetscScalar hx = 1.0 / (Mx - 1);
   PetscScalar kNyquist = M_PI / hx;
-
-  /*
-  Equations:
-
-  gu = u_t - c u_x - v
-  gv = (1 + 3 gamma u^2) v_t - c v_x - u_xx + 6 gamma u v^2
-
-  The time derivative terms are added in real space, all other terms are
-  dealt with in the frequency domain.
-  */
 
   ierr = scFftTransform(ctx->fftData->fft, x, 0, ctx->fftData->yu);CHKERRQ(ierr);
   ierr = scFftTransform(ctx->fftData->fft, x, 1, ctx->fftData->yv);CHKERRQ(ierr);
@@ -249,6 +236,21 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   /* time dependent term */
   ierr = VecAXPY(y, ctx->alpha, x);CHKERRQ(ierr);
 
+  PetscFunctionReturn(0);
+}
+
+PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
+{
+  PetscErrorCode    ierr;
+  PetscInt          i,imin,imax;
+  PetscScalar       *yarr;
+  const PetscScalar *x0;
+  const PetscScalar *xdot0;
+  const PetscScalar *xarr;
+
+  PetscFunctionBegin;
+  ierr = scJacobianLinearPartApply(ctx, x, y);CHKERRQ(ierr);
+
   /* Non-linear terms */
   ierr = VecGetArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
   ierr = VecGetArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
@@ -270,7 +272,6 @@ PetscErrorCode scJacobianApply(struct JacobianCtx *ctx, Vec x, Vec y)
   ierr = VecRestoreArray(y, &yarr);CHKERRQ(ierr);
   ierr = VecRestoreArrayRead(ctx->Xdot0, &xdot0);CHKERRQ(ierr);
   ierr = VecRestoreArrayRead(ctx->X0, &x0);CHKERRQ(ierr);
-
 
   PetscFunctionReturn(0);
 }

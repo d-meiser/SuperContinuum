@@ -199,13 +199,9 @@ PetscErrorCode SCIFunction(TS ts,PetscReal t,Vec X, Vec Xdot, Vec F, void *ptr)
   /* linear term */
   jctx.fftData = &ctx->fftData;
   jctx.alpha = 0.0;
-  ierr = DMGetGlobalVector(da, &jctx.X0);CHKERRQ(ierr);
-  ierr = DMGetGlobalVector(da, &jctx.Xdot0);CHKERRQ(ierr);
-  ierr = VecCopy(X, jctx.X0);CHKERRQ(ierr);
-  ierr = VecCopy(Xdot, jctx.Xdot0);CHKERRQ(ierr);
-  ierr = scJacobianApply(&jctx, X, F);CHKERRQ(ierr);
-  ierr = DMRestoreGlobalVector(da, &jctx.Xdot0);CHKERRQ(ierr);
-  ierr = DMRestoreGlobalVector(da, &jctx.X0);CHKERRQ(ierr);
+  jctx.X0 = 0;
+  jctx.Xdot0 = 0;
+  ierr = scJacobianLinearPartApply(&jctx, X, F);CHKERRQ(ierr);
 
   /* Nonlinear term */
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
